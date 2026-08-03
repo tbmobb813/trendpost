@@ -1,4 +1,4 @@
-# SynqPost
+# TrendPost
 
 > **AI-powered social media autopilot — self-hosted, open source, no credit limits.**
 
@@ -13,11 +13,11 @@ No SaaS subscription. No credit limits. No vendor reading your content. Your sta
 
 ---
 
-## Why SynqPost
+## Why TrendPost
 
 Most social media automation tools are SaaS products you rent forever. They cap your posts, read your content on their servers, and raise prices once you're dependent.
 
-SynqPost is different:
+TrendPost is different:
 
 | | SaaS tools (Blotato, Buffer, etc.) | SynqPost |
 |---|---|---|
