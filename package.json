@@ -1,0 +1,32 @@
+{
+  "name": "trendpost",
+  "version": "0.1.0",
+  "description": "AI content generation, scheduling, and multi-platform publishing — self-hosted, standalone.",
+  "private": true,
+  "type": "commonjs",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "dev": "tsx watch src/server.ts",
+    "start": "node dist/server.js",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.119.0",
+    "@hono/node-server": "^1.13.7",
+    "better-sqlite3": "^12.11.1",
+    "hono": "^4.6.14",
+    "twitter-api-v2": "^1.29.1"
+  },
+  "devDependencies": {
+    "@swc/core": "^1.15.47",
+    "@swc/jest": "^0.2.39",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^20.19.24",
+    "jest": "^30.4.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.9.3"
+  }
+}

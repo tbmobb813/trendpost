@@ -1,9 +1,11 @@
-.env
-.env.local
 node_modules
 dist
 coverage
+.git
+.env
+.env.local
 data
 *.db
 *.db-shm
 *.db-wal
+src/**/__tests__
