@@ -1,5 +1,14 @@
 jest.mock('../publishers', () => ({ publishToPlatform: jest.fn() }));
 
+// See condense.test.ts for why this goes through a global instead of a
+// closed-over const — content.ts constructs its Anthropic client at module
+// load time, before a normally-declared outer const would be assigned.
+jest.mock('@anthropic-ai/sdk', () => {
+  const create = jest.fn();
+  (globalThis as Record<string, unknown>).__anthropicMockCreate = create;
+  return jest.fn().mockImplementation(() => ({ messages: { create } }));
+});
+
 import { existsSync, unlinkSync } from 'fs';
 import {
   distributeDates,
@@ -9,9 +18,12 @@ import {
   schedulePost,
   approvePost,
   approveAllDrafts,
+  generateFromSource,
 } from '../content';
 import { TrendPostStorage } from '../storage';
 import { publishToPlatform } from '../publishers';
+
+const mockAnthropicCreate = (globalThis as Record<string, unknown>).__anthropicMockCreate as jest.Mock;
 
 const TEST_DB = './test-trendpost-content.db';
 const mockPublishToPlatform = publishToPlatform as jest.Mock;
@@ -287,5 +299,73 @@ describe('approveAllDrafts()', () => {
   it('returns 0 when there are no drafts', () => {
     const storage = fresh();
     expect(approveAllDrafts(storage)).toEqual({ approved: 0 });
+  });
+});
+
+describe('generateFromSource()', () => {
+  const TEST_DB5 = './test-trendpost-content-repurpose.db';
+  function fresh() {
+    if (existsSync(TEST_DB5)) unlinkSync(TEST_DB5);
+    return new TrendPostStorage(TEST_DB5);
+  }
+  afterEach(() => {
+    if (existsSync(TEST_DB5)) unlinkSync(TEST_DB5);
+    mockAnthropicCreate.mockReset();
+  });
+
+  const longSourceText = 'This is real source content about a specific topic. '.repeat(10);
+
+  it('creates a repurpose-sourced campaign and one draft post per extracted item', async () => {
+    const storage = fresh();
+    mockAnthropicCreate.mockResolvedValue({
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify([
+            { content: 'Post one from the source', platform: 'twitter' },
+            { content: 'Post two from the source', platform: 'linkedin' },
+          ]),
+        },
+      ],
+    });
+
+    const result = await generateFromSource(storage, {
+      sourceTitle: 'My Source',
+      sourceText: longSourceText,
+      platforms: ['twitter', 'linkedin'],
+    });
+
+    expect(result.campaign.source).toBe('repurpose');
+    expect(result.campaign.name).toBe('My Source');
+    expect(result.posts).toHaveLength(2);
+    expect(result.posts.every((p) => p.status === 'draft')).toBe(true);
+    expect(result.posts.every((p) => p.campaignId === result.campaign.id)).toBe(true);
+    expect(result.posts.map((p) => p.content)).toEqual([
+      'Post one from the source',
+      'Post two from the source',
+    ]);
+  });
+
+  it('schedules immediately when autoApprove is true', async () => {
+    const storage = fresh();
+    mockAnthropicCreate.mockResolvedValue({
+      content: [{ type: 'text', text: JSON.stringify([{ content: 'x', platform: 'twitter' }]) }],
+    });
+
+    const result = await generateFromSource(storage, {
+      sourceText: longSourceText,
+      platforms: ['twitter'],
+      autoApprove: true,
+    });
+
+    expect(result.posts[0].status).toBe('scheduled');
+  });
+
+  it('rejects source text under 200 characters without calling the LLM', async () => {
+    const storage = fresh();
+    await expect(
+      generateFromSource(storage, { sourceText: 'too short', platforms: ['twitter'] })
+    ).rejects.toThrow(/too short to repurpose/);
+    expect(mockAnthropicCreate).not.toHaveBeenCalled();
   });
 });

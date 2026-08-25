@@ -195,6 +195,86 @@ Return only valid JSON array. No markdown fences.`;
   return { ideas: saved, totalGenerated: saved.length };
 }
 
+// ── GENERATE POSTS FROM A REPURPOSED SOURCE ─────────────────────
+// Unlike generatePlan (which produces topic/angle ideas), this produces
+// real, ready-to-schedule post content directly from source material
+// (a blog article, a video transcript) — the point of repurposing is
+// getting posts back, not more ideas to write from scratch.
+export async function generateFromSource(
+  storage: TrendPostStorage,
+  params: {
+    sourceTitle?: string;
+    sourceText: string;
+    platforms: Platform[];
+    postsCount?: number;
+    autoApprove?: boolean;
+    campaignName?: string;
+  }
+): Promise<{ posts: ScheduledPost[]; campaign: Campaign }> {
+  const { sourceTitle, sourceText, platforms, postsCount = 5, campaignName } = params;
+  const autoApprove = params.autoApprove ?? process.env.AUTO_APPROVE === 'true';
+
+  if (sourceText.trim().length < 200) {
+    throw new Error('sourceText is too short to repurpose (under 200 characters) — extraction likely failed.');
+  }
+
+  const businessContext = defaultBusinessContext();
+  const prompt = `Source material${sourceTitle ? ` ("${sourceTitle}")` : ''}:
+${sourceText}
+
+Extract ${postsCount} distinct, specific posts from the source material above, spread across these platforms: ${platforms.join(', ')}.
+Distribute posts across ALL of the given platforms roughly evenly — don't default every post to the first one.
+Each post must be grounded in a specific point, claim, quote, or example from the source — not a generic paraphrase of "what this is about."
+${businessContext ? `Business context (match this voice, don't just describe the source): ${businessContext}` : ''}
+
+Return a JSON array. Each item:
+{
+  "content": "the full ready-to-post text, following the platform rules below",
+  "platform": "one of: ${platforms.join(', ')}"
+}
+
+PLATFORM GUIDELINES:
+- twitter/threads: 280 chars max, punchy, no hashtag spam (1-2 max)
+- linkedin: 150-300 words, professional but human, end with a question or insight
+- instagram: visual-first, 100-150 words, 3-5 relevant hashtags at the end
+- facebook: 80-200 words, conversational, ask a question to drive comments
+
+Return only valid JSON array. No markdown fences.`;
+
+  const response = await client.messages.create({
+    model: MODEL,
+    max_tokens: 4096,
+    system: CONTENT_SYSTEM_PROMPT,
+    messages: [{ role: 'user', content: prompt }],
+  });
+
+  const raw = response.content
+    .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+    .map((b) => b.text)
+    .join('');
+
+  const extracted = parseJson<Array<{ content: string; platform: Platform }>>(raw, 'generateFromSource');
+
+  const campaign = storage.createCampaign({
+    name: campaignName ?? sourceTitle ?? 'Repurposed content',
+    source: 'repurpose',
+  });
+
+  const dates = distributeDates(extracted.length, 1);
+  const posts = extracted.map((item, i) =>
+    storage.createPost({
+      content: item.content,
+      platform: item.platform,
+      scheduledAt: dates[i],
+      campaignId: campaign.id,
+      status: autoApprove ? 'scheduled' : 'draft',
+    })
+  );
+
+  storage.log('REPURPOSED', undefined, undefined, `${posts.length} post(s) from "${sourceTitle ?? 'source'}"`);
+  return { posts, campaign };
+}
+
 // ── GENERATE CONTENT PLAN FROM A LAUNCH TIMELINE ────────────────
 // Deterministic mapping, no LLM call — the caller already did the planning
 // work; this just turns a weekly timeline into dated content ideas.

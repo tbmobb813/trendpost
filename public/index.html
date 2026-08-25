@@ -127,6 +127,7 @@ textarea{resize:vertical;min-height:80px}
     </div>
     <div class="nav-item active" data-tab="dashboard" onclick="showTab('dashboard')"><span class="nav-icon">▦</span> Dashboard</div>
     <div class="nav-item" data-tab="generate" onclick="showTab('generate')"><span class="nav-icon">✦</span> Generate</div>
+    <div class="nav-item" data-tab="repurpose" onclick="showTab('repurpose')"><span class="nav-icon">⟳</span> Repurpose</div>
     <div class="nav-item" data-tab="queue" onclick="showTab('queue')"><span class="nav-icon">☷</span> Queue</div>
     <div class="nav-item" data-tab="activity" onclick="showTab('activity')"><span class="nav-icon">↗</span> Activity</div>
     <div class="nav-item" data-tab="settings" onclick="showTab('settings')"><span class="nav-icon">⚙</span> Settings</div>
@@ -208,6 +209,52 @@ textarea{resize:vertical;min-height:80px}
           <button class="btn sm" onclick="generatePost()">Regenerate</button>
         </div>
         <div id="gen-batch-output" style="display:none"></div>
+      </div>
+    </div>
+
+    <!-- REPURPOSE -->
+    <div class="tab" id="tab-repurpose">
+      <div class="tab-header">
+        <div class="tab-title">Repurpose content</div>
+      </div>
+      <div class="generate-panel">
+        <div class="gen-group" style="margin-bottom:14px">
+          <div class="gen-label">Source</div>
+          <select id="rp-source-type" onchange="onRepurposeSourceTypeChange()">
+            <option value="url">Blog post / article URL</option>
+            <option value="youtube">YouTube video URL</option>
+            <option value="text">Paste text (article or transcript)</option>
+          </select>
+        </div>
+        <div class="gen-group" style="margin-bottom:14px" id="rp-source-input-wrap">
+          <div class="gen-label" id="rp-source-label">URL</div>
+          <input type="text" id="rp-source-url" placeholder="https://example.com/blog/post-title">
+          <textarea id="rp-source-text" placeholder="Paste the article or transcript text here" style="display:none;min-height:160px"></textarea>
+        </div>
+        <div class="gen-row">
+          <div class="gen-group">
+            <div class="gen-label">Platforms</div>
+            <div style="display:flex;gap:12px;flex-wrap:wrap;padding-top:6px">
+              <label style="font-size:13px;display:flex;align-items:center;gap:4px"><input type="checkbox" class="rp-platform" value="twitter" checked> Twitter / X</label>
+              <label style="font-size:13px;display:flex;align-items:center;gap:4px"><input type="checkbox" class="rp-platform" value="linkedin" checked> LinkedIn</label>
+              <label style="font-size:13px;display:flex;align-items:center;gap:4px"><input type="checkbox" class="rp-platform" value="instagram"> Instagram</label>
+              <label style="font-size:13px;display:flex;align-items:center;gap:4px"><input type="checkbox" class="rp-platform" value="facebook"> Facebook</label>
+            </div>
+          </div>
+          <div class="gen-group">
+            <div class="gen-label">Number of posts</div>
+            <select id="rp-count" style="max-width:100px">
+              <option value="3">3</option>
+              <option value="5" selected>5</option>
+              <option value="8">8</option>
+              <option value="10">10</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn primary" onclick="submitRepurpose()">⟳ Generate posts from source</button>
+        <div id="rp-loading" style="display:none" class="loading"><div class="dot-anim"><span>●</span><span>●</span><span>●</span></div> Extracting and generating — this can take a while for long sources...</div>
+        <div id="rp-error" style="display:none;margin-top:12px" class="post-error"></div>
+        <div id="rp-output" style="display:none;margin-top:16px"></div>
       </div>
     </div>
 
@@ -446,6 +493,58 @@ async function scheduleGenerated() {
     showTab('queue');
   } catch (e) {
     alert('Failed to schedule: ' + e.message);
+  }
+}
+
+// ── REPURPOSE ──────────────────────────────────────────────────
+function onRepurposeSourceTypeChange() {
+  const type = document.getElementById('rp-source-type').value;
+  const label = document.getElementById('rp-source-label');
+  const urlInput = document.getElementById('rp-source-url');
+  const textInput = document.getElementById('rp-source-text');
+  if (type === 'text') {
+    label.textContent = 'Pasted text';
+    urlInput.style.display = 'none';
+    textInput.style.display = 'block';
+  } else {
+    label.textContent = type === 'youtube' ? 'YouTube video URL' : 'URL';
+    urlInput.style.display = 'block';
+    textInput.style.display = 'none';
+    urlInput.placeholder = type === 'youtube' ? 'https://www.youtube.com/watch?v=...' : 'https://example.com/blog/post-title';
+  }
+}
+
+async function submitRepurpose() {
+  const sourceType = document.getElementById('rp-source-type').value;
+  const source = sourceType === 'text'
+    ? document.getElementById('rp-source-text').value.trim()
+    : document.getElementById('rp-source-url').value.trim();
+  const platforms = [...document.querySelectorAll('.rp-platform:checked')].map(el => el.value);
+  const postsCount = Number(document.getElementById('rp-count').value);
+
+  const loading = document.getElementById('rp-loading');
+  const errorEl = document.getElementById('rp-error');
+  const output = document.getElementById('rp-output');
+  errorEl.style.display = 'none';
+  output.style.display = 'none';
+
+  if (!source) { alert('Enter a source URL or paste text first.'); return; }
+  if (!platforms.length) { alert('Pick at least one platform.'); return; }
+
+  loading.style.display = 'flex';
+  try {
+    const result = await api('/api/repurpose', {
+      method: 'POST',
+      body: JSON.stringify({ sourceType, source, platforms, postsCount }),
+    });
+    output.innerHTML = `<div class="section-label">Generated ${result.posts.length} post(s) — campaign "${escapeHtml(result.campaign.name)}"</div>` +
+      result.posts.map(p => postCard(p)).join('');
+    output.style.display = 'block';
+  } catch (e) {
+    errorEl.textContent = e.message;
+    errorEl.style.display = 'block';
+  } finally {
+    loading.style.display = 'none';
   }
 }
 

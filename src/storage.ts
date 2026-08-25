@@ -31,7 +31,7 @@ export interface ContentIdea {
   campaignId?: string;
 }
 
-export type CampaignSource = 'manual' | 'gtm';
+export type CampaignSource = 'manual' | 'gtm' | 'repurpose';
 
 export interface Campaign {
   id: string;

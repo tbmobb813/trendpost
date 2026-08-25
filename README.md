@@ -44,6 +44,9 @@ required.
 - **Content plans** — generate a batch of on-brand post ideas spread across
   a date range, or turn an existing launch timeline into a dated content
   calendar, no LLM call needed for the latter.
+- **Content repurposing** — turn a blog post URL, a YouTube video, or
+  pasted text into ready-to-schedule posts across your platforms, instead
+  of hand-typing a topic every time. See below for the YouTube caveat.
 - **4-platform publishing** — native API integrations, no middleware:
   Twitter v2, LinkedIn UGC Posts, Meta Graph API (`src/publishers/`).
 - **Built-in scheduler** — an in-process interval loop publishes due posts
@@ -73,6 +76,7 @@ required.
 | `POST /api/content/plan` | Generate a batch of content ideas via Claude |
 | `POST /api/content/plan-from-timeline` | Turn a launch timeline into dated content ideas (no LLM call) |
 | `POST /api/content/analyze` | Score a post draft and suggest a specific rewrite |
+| `POST /api/repurpose` | Turn a blog URL, YouTube video, or pasted text into ready platform posts — see Content repurposing below |
 | `POST /api/campaigns` / `GET /api/campaigns` | Create / list campaigns |
 | `POST /api/posts` / `GET /api/posts` | Schedule / list posts (`status`, `platform`, `daysAhead`, `daysAgo`, `dueOnly` filters; `autoApprove` body field overrides the `.env` default per-call) |
 | `DELETE /api/posts/:id` | Delete a scheduled post |
@@ -86,6 +90,32 @@ required.
 | `POST /api/tasks/publish-due-posts` | Manually trigger the same sweep the scheduler runs automatically |
 | `POST /api/verify/{anthropic,twitter,linkedin,facebook,instagram}` | Stateless credential check — makes one live call to the platform, never persists what you send it |
 | `GET /health` | Health check |
+
+## Content repurposing
+
+`POST /api/repurpose` (also available from the dashboard's Repurpose tab) turns
+existing long-form material into posts:
+
+```json
+{ "sourceType": "url", "source": "https://example.com/blog/post", "platforms": ["twitter", "linkedin"], "postsCount": 5 }
+```
+
+`sourceType` is one of:
+- `"url"` — fetches the page and extracts the main article text (`@mozilla/readability`).
+- `"youtube"` — fetches the video's transcript. **This scrapes YouTube's public,
+  undocumented caption endpoint — there is no official API for captions on a
+  video you don't own.** It can break if YouTube changes its page structure.
+  If it fails, resubmit with `sourceType: "text"` and the transcript pasted
+  manually (e.g. copied from YouTube's own transcript panel).
+- `"text"` — the `source` string is used directly, no extraction — the
+  manual fallback for both of the above.
+
+Long sources (a full-episode transcript) get condensed via a chunk-summarize
+pass before post generation, so requests against long sources can take
+10–40 seconds. Generated posts land as `draft` or `scheduled` following the
+same `AUTO_APPROVE` rule as everything else, tagged to a new campaign.
+
+PDF upload is not supported yet.
 
 ## Configuration
 
