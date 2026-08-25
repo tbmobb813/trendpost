@@ -19,6 +19,7 @@ import {
   approvePost,
   approveAllDrafts,
   generateFromSource,
+  validatePlatformConstraints,
 } from '../content';
 import { TrendPostStorage } from '../storage';
 import { publishToPlatform } from '../publishers';
@@ -315,19 +316,29 @@ describe('generateFromSource()', () => {
 
   const longSourceText = 'This is real source content about a specific topic. '.repeat(10);
 
-  it('creates a repurpose-sourced campaign and one draft post per extracted item', async () => {
+  function textResponse(text: string) {
+    return { content: [{ type: 'text', text }] };
+  }
+
+  const briefJson = JSON.stringify({
+    mainThesis: 'The source makes one clear point.',
+    keyClaims: ['Claim one', 'Claim two'],
+    tone: 'direct',
+    quotableMoments: ['A striking line from the source'],
+  });
+
+  it('extracts a brief first, then generates posts from it (two sequential LLM calls)', async () => {
     const storage = fresh();
-    mockAnthropicCreate.mockResolvedValue({
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify([
+    mockAnthropicCreate
+      .mockResolvedValueOnce(textResponse(briefJson))
+      .mockResolvedValueOnce(
+        textResponse(
+          JSON.stringify([
             { content: 'Post one from the source', platform: 'twitter' },
             { content: 'Post two from the source', platform: 'linkedin' },
-          ]),
-        },
-      ],
-    });
+          ])
+        )
+      );
 
     const result = await generateFromSource(storage, {
       sourceTitle: 'My Source',
@@ -335,6 +346,7 @@ describe('generateFromSource()', () => {
       platforms: ['twitter', 'linkedin'],
     });
 
+    expect(mockAnthropicCreate).toHaveBeenCalledTimes(2);
     expect(result.campaign.source).toBe('repurpose');
     expect(result.campaign.name).toBe('My Source');
     expect(result.posts).toHaveLength(2);
@@ -348,9 +360,9 @@ describe('generateFromSource()', () => {
 
   it('schedules immediately when autoApprove is true', async () => {
     const storage = fresh();
-    mockAnthropicCreate.mockResolvedValue({
-      content: [{ type: 'text', text: JSON.stringify([{ content: 'x', platform: 'twitter' }]) }],
-    });
+    mockAnthropicCreate
+      .mockResolvedValueOnce(textResponse(briefJson))
+      .mockResolvedValueOnce(textResponse(JSON.stringify([{ content: 'x', platform: 'twitter' }])));
 
     const result = await generateFromSource(storage, {
       sourceText: longSourceText,
@@ -367,5 +379,63 @@ describe('generateFromSource()', () => {
       generateFromSource(storage, { sourceText: 'too short', platforms: ['twitter'] })
     ).rejects.toThrow(/too short to repurpose/);
     expect(mockAnthropicCreate).not.toHaveBeenCalled();
+  });
+
+  it('regenerates once when a post violates a hard platform constraint (tweet over 280 chars)', async () => {
+    const storage = fresh();
+    const tooLong = 'x'.repeat(300);
+    const fixed = 'A properly short tweet.';
+    mockAnthropicCreate
+      .mockResolvedValueOnce(textResponse(briefJson)) // brief
+      .mockResolvedValueOnce(textResponse(JSON.stringify([{ content: tooLong, platform: 'twitter' }]))) // initial (violates)
+      .mockResolvedValueOnce(textResponse(fixed)); // regenerated (plain text, not JSON)
+
+    const result = await generateFromSource(storage, {
+      sourceText: longSourceText,
+      platforms: ['twitter'],
+    });
+
+    expect(mockAnthropicCreate).toHaveBeenCalledTimes(3);
+    expect(result.posts[0].content).toBe(fixed);
+  });
+
+  it('does not regenerate when every post already satisfies its platform constraint', async () => {
+    const storage = fresh();
+    mockAnthropicCreate
+      .mockResolvedValueOnce(textResponse(briefJson))
+      .mockResolvedValueOnce(textResponse(JSON.stringify([{ content: 'short and fine', platform: 'twitter' }])));
+
+    await generateFromSource(storage, { sourceText: longSourceText, platforms: ['twitter'] });
+
+    expect(mockAnthropicCreate).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('validatePlatformConstraints()', () => {
+  it('flags a tweet over 280 chars', () => {
+    expect(validatePlatformConstraints('x'.repeat(281), 'twitter')).toEqual({
+      ok: false,
+      reason: expect.stringContaining('280'),
+    });
+  });
+
+  it('passes a tweet at or under 280 chars', () => {
+    expect(validatePlatformConstraints('x'.repeat(280), 'twitter')).toEqual({ ok: true });
+  });
+
+  it('flags a linkedin post far past the word-count guideline', () => {
+    const words = Array(401).fill('word').join(' ');
+    expect(validatePlatformConstraints(words, 'linkedin').ok).toBe(false);
+  });
+
+  it('does not flag a short linkedin post — minimums are style guidance, not enforced', () => {
+    expect(validatePlatformConstraints('Just a few words.', 'linkedin')).toEqual({ ok: true });
+  });
+
+  it('flags a facebook post far past its guideline and an instagram post far past its guideline', () => {
+    const words = Array(301).fill('word').join(' ');
+    expect(validatePlatformConstraints(words, 'facebook').ok).toBe(false);
+    const igWords = Array(201).fill('word').join(' ');
+    expect(validatePlatformConstraints(igWords, 'instagram').ok).toBe(false);
   });
 });

@@ -45,6 +45,35 @@ function parseJson<T>(raw: string, context: string): T {
   }
 }
 
+// Checks the one truly hard, platform-enforced constraint (Twitter/Threads'
+// 280-char cap — the real API rejects anything longer) plus a generous
+// ceiling on the others to catch genuine runaway output. Deliberately does
+// NOT enforce the system prompt's minimum word-count guidelines — those are
+// style guidance, not something worth burning a regenerate call over.
+export function validatePlatformConstraints(
+  content: string,
+  platform: Platform
+): { ok: boolean; reason?: string } {
+  const wordCount = content.trim().split(/\s+/).filter(Boolean).length;
+  switch (platform) {
+    case 'twitter':
+    case 'threads':
+      if (content.length > 280) {
+        return { ok: false, reason: `${content.length} chars — Twitter/X hard-caps posts at 280` };
+      }
+      return { ok: true };
+    case 'linkedin':
+      if (wordCount > 400) return { ok: false, reason: `${wordCount} words — far past LinkedIn's ~300-word guideline` };
+      return { ok: true };
+    case 'instagram':
+      if (wordCount > 200) return { ok: false, reason: `${wordCount} words — far past Instagram's ~150-word guideline` };
+      return { ok: true };
+    case 'facebook':
+      if (wordCount > 300) return { ok: false, reason: `${wordCount} words — far past Facebook's ~200-word guideline` };
+      return { ok: true };
+  }
+}
+
 const client = new Anthropic();
 
 // Falls back to the brand identity configured in .env when a caller doesn't
@@ -195,6 +224,91 @@ Return only valid JSON array. No markdown fences.`;
   return { ideas: saved, totalGenerated: saved.length };
 }
 
+interface ContentBrief {
+  mainThesis: string;
+  keyClaims: string[];
+  tone: string;
+  quotableMoments: string[];
+}
+
+// Stage one of repurposing: distill the source into a structured brief
+// before generating any posts. Separating "understand the source" from
+// "write platform posts" into two prompts produces more consistent output
+// than asking one prompt to do both at once, especially on long or
+// rambling sources — the model has to commit to what actually matters
+// before it starts writing.
+async function extractBrief(sourceText: string, sourceTitle?: string): Promise<ContentBrief> {
+  const prompt = `Extract a structured brief from this source material${sourceTitle ? ` ("${sourceTitle}")` : ''}, to be used for generating social media posts.
+
+SOURCE:
+${sourceText}
+
+Return JSON:
+{
+  "mainThesis": "the single core argument or point of the source, one sentence",
+  "keyClaims": ["3-6 specific, concrete claims/facts/examples from the source — not generic summary lines"],
+  "tone": "the source's actual tone (e.g. technical, opinionated, instructional, narrative)",
+  "quotableMoments": ["1-4 short, striking phrases or sentences lifted verbatim from the source that would work as a hook or pull-quote"]
+}
+
+Return only valid JSON. No markdown fences.`;
+
+  const response = await client.messages.create({
+    model: MODEL,
+    max_tokens: 1024,
+    system: CONTENT_SYSTEM_PROMPT,
+    messages: [{ role: 'user', content: prompt }],
+  });
+
+  const raw = response.content
+    .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+    .map((b) => b.text)
+    .join('');
+
+  return parseJson<ContentBrief>(raw, 'extractBrief');
+}
+
+function formatBrief(brief: ContentBrief): string {
+  return `Main thesis: ${brief.mainThesis}
+Key claims:
+${brief.keyClaims.map((c) => `- ${c}`).join('\n')}
+Source tone: ${brief.tone}
+Quotable moments:
+${brief.quotableMoments.map((q) => `- "${q}"`).join('\n')}`;
+}
+
+// One retry, with the actual violation reason fed back to the model —
+// not a generic "make it shorter," but "247 chars over Twitter's cap,"
+// so the rewrite targets the specific problem instead of guessing.
+async function regenerateForConstraint(
+  brief: ContentBrief,
+  platform: Platform,
+  previousContent: string,
+  reason: string
+): Promise<string> {
+  const prompt = `Your previous ${platform} post violates a hard constraint: ${reason}
+
+Previous attempt:
+"${previousContent}"
+
+Source brief this post is grounded in:
+${formatBrief(brief)}
+
+Rewrite it to fix this specific problem while preserving the core point and staying grounded in the brief. Return ONLY the corrected post content — no labels, no explanation.`;
+
+  const response = await client.messages.create({
+    model: MODEL,
+    max_tokens: 1024,
+    system: CONTENT_SYSTEM_PROMPT,
+    messages: [{ role: 'user', content: prompt }],
+  });
+
+  return response.content
+    .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+    .map((b) => b.text)
+    .join('');
+}
+
 // ── GENERATE POSTS FROM A REPURPOSED SOURCE ─────────────────────
 // Unlike generatePlan (which produces topic/angle ideas), this produces
 // real, ready-to-schedule post content directly from source material
@@ -218,13 +332,15 @@ export async function generateFromSource(
     throw new Error('sourceText is too short to repurpose (under 200 characters) — extraction likely failed.');
   }
 
+  const brief = await extractBrief(sourceText, sourceTitle);
   const businessContext = defaultBusinessContext();
-  const prompt = `Source material${sourceTitle ? ` ("${sourceTitle}")` : ''}:
-${sourceText}
+  const prompt = `Content brief extracted from source material${sourceTitle ? ` ("${sourceTitle}")` : ''}:
 
-Extract ${postsCount} distinct, specific posts from the source material above, spread across these platforms: ${platforms.join(', ')}.
+${formatBrief(brief)}
+
+Extract ${postsCount} distinct, specific posts grounded in the brief above, spread across these platforms: ${platforms.join(', ')}.
 Distribute posts across ALL of the given platforms roughly evenly — don't default every post to the first one.
-Each post must be grounded in a specific point, claim, quote, or example from the source — not a generic paraphrase of "what this is about."
+Each post must use a specific claim, quote, or example from the brief — not a generic paraphrase of "what this is about."
 ${businessContext ? `Business context (match this voice, don't just describe the source): ${businessContext}` : ''}
 
 Return a JSON array. Each item:
@@ -254,6 +370,16 @@ Return only valid JSON array. No markdown fences.`;
     .join('');
 
   const extracted = parseJson<Array<{ content: string; platform: Platform }>>(raw, 'generateFromSource');
+
+  // Catch and fix genuinely broken output (e.g. a tweet over 280 chars)
+  // before it's ever saved — one retry per violating post, with the
+  // specific violation fed back so the rewrite targets the real problem.
+  for (const item of extracted) {
+    const validation = validatePlatformConstraints(item.content, item.platform);
+    if (!validation.ok) {
+      item.content = await regenerateForConstraint(brief, item.platform, item.content, validation.reason!);
+    }
+  }
 
   const campaign = storage.createCampaign({
     name: campaignName ?? sourceTitle ?? 'Repurposed content',
