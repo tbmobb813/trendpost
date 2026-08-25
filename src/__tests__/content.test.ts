@@ -1,7 +1,15 @@
 jest.mock('../publishers', () => ({ publishToPlatform: jest.fn() }));
 
 import { existsSync, unlinkSync } from 'fs';
-import { distributeDates, timelineWeekNumber, listPosts, publishPost } from '../content';
+import {
+  distributeDates,
+  timelineWeekNumber,
+  listPosts,
+  publishPost,
+  schedulePost,
+  approvePost,
+  approveAllDrafts,
+} from '../content';
 import { TrendPostStorage } from '../storage';
 import { publishToPlatform } from '../publishers';
 
@@ -168,5 +176,116 @@ describe('publishPost()', () => {
   it('throws for an unknown postId', async () => {
     const storage = freshStorage();
     await expect(publishPost(storage, 'nope')).rejects.toThrow(/No post found/);
+  });
+});
+
+describe('schedulePost() — autoApprove / AUTO_APPROVE default', () => {
+  const TEST_DB2 = './test-trendpost-content-schedule.db';
+  const originalEnv = { ...process.env };
+
+  function fresh() {
+    if (existsSync(TEST_DB2)) unlinkSync(TEST_DB2);
+    return new TrendPostStorage(TEST_DB2);
+  }
+
+  afterEach(() => {
+    if (existsSync(TEST_DB2)) unlinkSync(TEST_DB2);
+    process.env = { ...originalEnv };
+  });
+
+  it('creates a draft by default when AUTO_APPROVE is unset', () => {
+    delete process.env.AUTO_APPROVE;
+    const storage = fresh();
+    const post = schedulePost(storage, {
+      content: 'hi',
+      platform: 'twitter',
+      scheduledAt: new Date().toISOString(),
+    });
+    expect(post.status).toBe('draft');
+  });
+
+  it('creates a scheduled post when AUTO_APPROVE=true', () => {
+    process.env.AUTO_APPROVE = 'true';
+    const storage = fresh();
+    const post = schedulePost(storage, {
+      content: 'hi',
+      platform: 'twitter',
+      scheduledAt: new Date().toISOString(),
+    });
+    expect(post.status).toBe('scheduled');
+  });
+
+  it('an explicit autoApprove param overrides the env default', () => {
+    delete process.env.AUTO_APPROVE;
+    const storage = fresh();
+    const post = schedulePost(storage, {
+      content: 'hi',
+      platform: 'twitter',
+      scheduledAt: new Date().toISOString(),
+      autoApprove: true,
+    });
+    expect(post.status).toBe('scheduled');
+  });
+});
+
+describe('approvePost()', () => {
+  const TEST_DB3 = './test-trendpost-content-approve.db';
+  function fresh() {
+    if (existsSync(TEST_DB3)) unlinkSync(TEST_DB3);
+    return new TrendPostStorage(TEST_DB3);
+  }
+  afterEach(() => {
+    if (existsSync(TEST_DB3)) unlinkSync(TEST_DB3);
+  });
+
+  it('promotes a draft to scheduled', () => {
+    const storage = fresh();
+    const draft = storage.createPost({
+      content: 'x',
+      platform: 'twitter',
+      scheduledAt: new Date(),
+      status: 'draft',
+    });
+    const approved = approvePost(storage, draft.id);
+    expect(approved!.status).toBe('scheduled');
+  });
+
+  it('returns null for an unknown postId', () => {
+    const storage = fresh();
+    expect(approvePost(storage, 'nope')).toBeNull();
+  });
+});
+
+describe('approveAllDrafts()', () => {
+  const TEST_DB4 = './test-trendpost-content-approve-all.db';
+  function fresh() {
+    if (existsSync(TEST_DB4)) unlinkSync(TEST_DB4);
+    return new TrendPostStorage(TEST_DB4);
+  }
+  afterEach(() => {
+    if (existsSync(TEST_DB4)) unlinkSync(TEST_DB4);
+  });
+
+  it('approves every draft and leaves non-drafts untouched, returning the count', () => {
+    const storage = fresh();
+    storage.createPost({ content: 'a', platform: 'twitter', scheduledAt: new Date(), status: 'draft' });
+    storage.createPost({ content: 'b', platform: 'twitter', scheduledAt: new Date(), status: 'draft' });
+    const alreadyScheduled = storage.createPost({
+      content: 'c',
+      platform: 'twitter',
+      scheduledAt: new Date(),
+    });
+
+    const result = approveAllDrafts(storage);
+
+    expect(result).toEqual({ approved: 2 });
+    expect(storage.listPosts({ status: 'draft' })).toHaveLength(0);
+    expect(storage.listPosts({ status: 'scheduled' })).toHaveLength(3);
+    expect(storage.getPost(alreadyScheduled.id)!.status).toBe('scheduled');
+  });
+
+  it('returns 0 when there are no drafts', () => {
+    const storage = fresh();
+    expect(approveAllDrafts(storage)).toEqual({ approved: 0 });
   });
 });

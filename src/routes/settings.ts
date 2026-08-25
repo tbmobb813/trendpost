@@ -9,6 +9,7 @@ export function registerSettingsRoutes(app: Hono): void {
       productName: process.env.PRODUCT_NAME ?? null,
       brandVoice: process.env.BRAND_VOICE ?? null,
       publishCheckIntervalMs: Number(process.env.PUBLISH_CHECK_INTERVAL_MS) || 5 * 60 * 1000,
+      autoApprove: process.env.AUTO_APPROVE === 'true',
       platforms: {
         twitter: isConfigured([
           'TWITTER_API_KEY',

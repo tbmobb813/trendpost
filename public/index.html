@@ -63,6 +63,7 @@ body{font-family:var(--font-sans);color:var(--color-text-primary);background:var
 .day-name{font-size:10px;color:var(--color-text-tertiary);font-weight:500;text-transform:uppercase;margin-bottom:4px}
 .day-num{font-size:13px;font-weight:500;margin-bottom:6px}
 .post-pill{font-size:10px;padding:2px 6px;border-radius:10px;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.post-pill.draft{background:#FAEEDA;color:#633806}
 .post-pill.scheduled{background:#E1F5EE;color:#085041}
 .post-pill.published{background:#EAF3DE;color:#27500A}
 .post-pill.failed{background:#FBEAEA;color:#8A2620}
@@ -80,6 +81,7 @@ textarea{resize:vertical;min-height:80px}
 .post-meta{display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
 .post-time{font-size:11px;color:var(--color-text-tertiary)}
 .post-status{font-size:11px;padding:2px 8px;border-radius:10px}
+.status-draft{background:#FAEEDA;color:#633806}
 .status-scheduled{background:#E1F5EE;color:#085041}
 .status-published{background:#EAF3DE;color:#27500A}
 .status-failed{background:#FBEAEA;color:#8A2620}
@@ -147,10 +149,10 @@ textarea{resize:vertical;min-height:80px}
         <button class="btn primary" onclick="showTab('generate')">✦ Generate posts</button>
       </div>
       <div class="stats-row" id="dash-stats">
+        <div class="stat-card"><div class="stat-label">Drafts (needs review)</div><div class="stat-val">—</div></div>
         <div class="stat-card"><div class="stat-label">Scheduled</div><div class="stat-val">—</div></div>
-        <div class="stat-card"><div class="stat-label">Published (30d)</div><div class="stat-val">—</div></div>
+        <div class="stat-card"><div class="stat-label">Published</div><div class="stat-val">—</div></div>
         <div class="stat-card"><div class="stat-label">Failed</div><div class="stat-val">—</div></div>
-        <div class="stat-card"><div class="stat-label">Ideas</div><div class="stat-val">—</div></div>
       </div>
       <div class="section-label">Platforms configured</div>
       <div class="platform-badges" id="dash-platforms" style="margin-bottom:24px"></div>
@@ -213,7 +215,10 @@ textarea{resize:vertical;min-height:80px}
     <div class="tab" id="tab-queue">
       <div class="tab-header">
         <div class="tab-title">Content queue</div>
-        <button class="btn" onclick="showTab('generate')">+ Add post</button>
+        <div style="display:flex;gap:8px">
+          <button class="btn" onclick="approveAllDraftsUI()">✓ Approve all drafts</button>
+          <button class="btn" onclick="showTab('generate')">+ Add post</button>
+        </div>
       </div>
       <div class="section-label">Next 7 days</div>
       <div class="queue-grid" id="queue-calendar"></div>
@@ -243,6 +248,8 @@ textarea{resize:vertical;min-height:80px}
           <div id="ana-totals" style="display:flex;flex-direction:column;gap:4px"></div>
         </div>
       </div>
+      <div class="section-label">Recent activity</div>
+      <div id="ana-logs"><div class="empty-state">Loading…</div></div>
     </div>
 
     <!-- SETTINGS -->
@@ -261,6 +268,7 @@ textarea{resize:vertical;min-height:80px}
       <div class="settings-section">
         <div class="settings-title">Scheduling</div>
         <div class="settings-row"><div>Scheduler sweep interval</div><div id="set-interval" style="color:var(--color-text-secondary)">—</div></div>
+        <div class="settings-row"><div>Auto-approve<div style="font-size:11px;color:var(--color-text-tertiary)">When off, new posts land as drafts pending approval</div></div><div id="set-autoapprove" style="color:var(--color-text-secondary)">—</div></div>
       </div>
       <div class="settings-section">
         <div class="settings-title">Platform credentials</div>
@@ -302,6 +310,8 @@ function fmtTime(iso) {
 
 function postCard(p, { showPublish } = {}) {
   const errorHtml = p.status === 'failed' && p.errorMessage ? `<div class="post-error">${escapeHtml(p.errorMessage)}</div>` : '';
+  const approveBtn = p.status === 'draft'
+    ? `<button class="btn sm primary" onclick="approvePostUI('${p.id}')">Approve</button>` : '';
   const publishBtn = showPublish && p.status === 'scheduled'
     ? `<button class="btn sm primary" onclick="publishNow('${p.id}')">Publish now</button>` : '';
   return `<div class="post-card">
@@ -313,6 +323,7 @@ function postCard(p, { showPublish } = {}) {
     <div class="post-body">${escapeHtml(p.content)}</div>
     ${errorHtml}
     <div class="post-actions">
+      ${approveBtn}
       ${publishBtn}
       <button class="btn sm danger" onclick="deletePostUI('${p.id}')">Delete</button>
     </div>
@@ -325,20 +336,17 @@ function escapeHtml(s) {
 
 // ── DASHBOARD ──────────────────────────────────────────────────
 async function loadDashboard() {
-  const [scheduled, published, failed, ideas, settings, upcoming] = await Promise.all([
-    api('/api/posts?status=scheduled&daysAhead=36500'),
-    api('/api/posts?status=published&daysAgo=30'),
-    api('/api/posts?status=failed&daysAgo=36500'),
-    api('/api/ideas'),
+  const [stats, settings, upcoming] = await Promise.all([
+    api('/api/stats'),
     api('/api/settings'),
     api('/api/posts?daysAhead=14'),
   ]);
 
-  const stats = document.querySelectorAll('#dash-stats .stat-val');
-  stats[0].textContent = scheduled.length;
-  stats[1].textContent = published.length;
-  stats[2].textContent = failed.length;
-  stats[3].textContent = ideas.length;
+  const statEls = document.querySelectorAll('#dash-stats .stat-val');
+  statEls[0].textContent = stats.draft;
+  statEls[1].textContent = stats.scheduled;
+  statEls[2].textContent = stats.published;
+  statEls[3].textContent = stats.failed;
 
   const platformsEl = document.getElementById('dash-platforms');
   platformsEl.innerHTML = PLATFORM_KEYS.map(k =>
@@ -506,6 +514,17 @@ async function deletePostUI(id) {
   document.querySelector('.nav-item.active').dataset.tab === 'queue' ? loadQueue() : loadDashboard();
 }
 
+async function approvePostUI(id) {
+  await api(`/api/posts/${id}/approve`, { method: 'POST' });
+  document.querySelector('.nav-item.active').dataset.tab === 'queue' ? loadQueue() : loadDashboard();
+}
+
+async function approveAllDraftsUI() {
+  const result = await api('/api/posts/approve-all', { method: 'POST' });
+  if (result.approved === 0) { alert('No drafts to approve.'); return; }
+  loadQueue();
+}
+
 // ── ACTIVITY ───────────────────────────────────────────────────
 function bar(label, value, max, color) {
   const pct = max > 0 ? Math.round((value / max) * 100) : 0;
@@ -513,22 +532,24 @@ function bar(label, value, max, color) {
 }
 
 async function loadActivity() {
-  const [future, past, ideas, campaigns] = await Promise.all([
+  const [future, past, ideas, campaigns, logs] = await Promise.all([
     api('/api/posts?daysAhead=36500'),
     api('/api/posts?daysAgo=36500'),
     api('/api/ideas'),
     api('/api/campaigns'),
+    api('/api/logs?limit=20'),
   ]);
   const byId = new Map();
   [...future, ...past].forEach(p => byId.set(p.id, p));
   const all = [...byId.values()];
 
-  const byStatus = { scheduled: 0, published: 0, failed: 0 };
+  const byStatus = { draft: 0, scheduled: 0, published: 0, failed: 0 };
   const byPlatform = { twitter: 0, linkedin: 0, instagram: 0, facebook: 0 };
   all.forEach(p => { if (p.status in byStatus) byStatus[p.status]++; if (p.platform in byPlatform) byPlatform[p.platform]++; });
 
   const maxStatus = Math.max(...Object.values(byStatus), 1);
   document.getElementById('ana-status').innerHTML =
+    bar('draft', byStatus.draft, maxStatus, '#EF9F27') +
     bar('scheduled', byStatus.scheduled, maxStatus, '#378ADD') +
     bar('published', byStatus.published, maxStatus, '#1D9E75') +
     bar('failed', byStatus.failed, maxStatus, '#D4534F');
@@ -540,6 +561,16 @@ async function loadActivity() {
     <div style="display:flex;justify-content:space-between;font-size:13px"><span>Total posts</span><span style="font-weight:500">${all.length}</span></div>
     <div style="display:flex;justify-content:space-between;font-size:13px"><span>Ideas generated</span><span style="font-weight:500">${ideas.length}</span></div>
     <div style="display:flex;justify-content:space-between;font-size:13px"><span>Campaigns</span><span style="font-weight:500">${campaigns.length}</span></div>`;
+
+  document.getElementById('ana-logs').innerHTML = logs.length
+    ? logs.map(l => `<div class="idea-card">
+        <div style="display:flex;justify-content:space-between;gap:8px">
+          <span class="idea-topic">${escapeHtml(l.event)}${l.platform ? ` <span class="badge ${l.platform}" style="margin-left:4px">${PLATFORM_LABELS[l.platform] || l.platform}</span>` : ''}</span>
+          <span class="post-time">${fmtTime(l.createdAt)}</span>
+        </div>
+        ${l.detail ? `<div class="idea-angle">${escapeHtml(l.detail)}</div>` : ''}
+      </div>`).join('')
+    : '<div class="empty-state">No activity recorded yet.</div>';
 }
 
 // ── SETTINGS ───────────────────────────────────────────────────
@@ -549,6 +580,7 @@ async function loadSettings() {
   document.getElementById('set-product').textContent = s.productName || 'not set';
   document.getElementById('set-voice').textContent = s.brandVoice || 'not set';
   document.getElementById('set-interval').textContent = Math.round(s.publishCheckIntervalMs / 60000) + ' min';
+  document.getElementById('set-autoapprove').textContent = s.autoApprove ? 'true (posts schedule immediately)' : 'false (posts require approval)';
 
   document.getElementById('set-platforms').innerHTML = PLATFORM_KEYS.map(k => `
     <div class="settings-row">

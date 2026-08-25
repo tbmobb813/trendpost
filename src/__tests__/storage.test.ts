@@ -273,3 +273,78 @@ describe('TrendPostStorage — listCampaigns()', () => {
     expect(storage.listCampaigns()).toEqual([]);
   });
 });
+
+// ── Draft status ─────────────────────────────────────────────────────────
+
+describe('TrendPostStorage — createPost() status param', () => {
+  it('defaults to scheduled when status is omitted (preserves existing behavior)', () => {
+    const storage = freshStorage();
+    const post = storage.createPost({ content: 'x', platform: 'twitter', scheduledAt: new Date() });
+    expect(post.status).toBe('scheduled');
+  });
+
+  it('creates a draft when status: "draft" is passed explicitly', () => {
+    const storage = freshStorage();
+    const post = storage.createPost({
+      content: 'x',
+      platform: 'twitter',
+      scheduledAt: new Date(),
+      status: 'draft',
+    });
+    expect(post.status).toBe('draft');
+    expect(storage.getPost(post.id)!.status).toBe('draft');
+  });
+});
+
+// ── Audit log ────────────────────────────────────────────────────────────
+
+describe('TrendPostStorage — log() / recentLogs()', () => {
+  it('records an event and returns it, most recent first', () => {
+    const storage = freshStorage();
+    storage.log('GENERATED', 'twitter', 'post-1', 'topic seed');
+    storage.log('POSTED', 'twitter', 'post-1', 'https://x.com/...');
+    const logs = storage.recentLogs();
+    expect(logs).toHaveLength(2);
+    expect(logs[0].event).toBe('POSTED');
+    expect(logs[1].event).toBe('GENERATED');
+    expect(logs[0].platform).toBe('twitter');
+    expect(logs[0].postId).toBe('post-1');
+    expect(logs[0].createdAt).toBeInstanceOf(Date);
+  });
+
+  it('allows optional platform/postId/detail to be omitted', () => {
+    const storage = freshStorage();
+    storage.log('SWEEP');
+    const [entry] = storage.recentLogs();
+    expect(entry.platform).toBeNull();
+    expect(entry.postId).toBeNull();
+    expect(entry.detail).toBeNull();
+  });
+
+  it('respects the limit param', () => {
+    const storage = freshStorage();
+    for (let i = 0; i < 5; i++) storage.log('EVENT');
+    expect(storage.recentLogs(2)).toHaveLength(2);
+  });
+});
+
+// ── Stats ────────────────────────────────────────────────────────────────
+
+describe('TrendPostStorage — getStats()', () => {
+  it('returns zeroed counts when no posts exist', () => {
+    const storage = freshStorage();
+    expect(storage.getStats()).toEqual({ total: 0, draft: 0, scheduled: 0, published: 0, failed: 0 });
+  });
+
+  it('counts posts by status correctly', () => {
+    const storage = freshStorage();
+    storage.createPost({ content: 'a', platform: 'twitter', scheduledAt: new Date(), status: 'draft' });
+    storage.createPost({ content: 'b', platform: 'twitter', scheduledAt: new Date(), status: 'draft' });
+    const scheduled = storage.createPost({ content: 'c', platform: 'twitter', scheduledAt: new Date() });
+    storage.updatePostStatus(scheduled.id, 'published');
+    const failed = storage.createPost({ content: 'd', platform: 'twitter', scheduledAt: new Date() });
+    storage.updatePostStatus(failed.id, 'failed', 'boom');
+
+    expect(storage.getStats()).toEqual({ total: 4, draft: 2, scheduled: 0, published: 1, failed: 1 });
+  });
+});

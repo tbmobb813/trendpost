@@ -12,6 +12,7 @@ import { registerPostRoutes } from './routes/posts';
 import { registerContentRoutes } from './routes/content';
 import { registerSettingsRoutes } from './routes/settings';
 import { registerVerifyRoutes } from './routes/verify';
+import { registerStatsRoutes } from './routes/stats';
 
 const app = new Hono();
 const storage = new TrendPostStorage();
@@ -23,6 +24,7 @@ registerPostRoutes(app, storage);
 registerContentRoutes(app, storage);
 registerSettingsRoutes(app);
 registerVerifyRoutes(app);
+registerStatsRoutes(app, storage);
 
 app.use('/*', serveStatic({ root: './public' }));
 

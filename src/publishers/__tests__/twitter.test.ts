@@ -64,4 +64,47 @@ describe('postToTwitter()', () => {
       expect(mockTweet).not.toHaveBeenCalled();
     }
   );
+
+  describe('thread posting (content separated by "\\n\\n---\\n\\n")', () => {
+    it(
+      'posts each part as a reply to the previous tweet and returns the full chain',
+      async () => {
+        mockTweet
+          .mockResolvedValueOnce({ data: { id: 'tw-1' } })
+          .mockResolvedValueOnce({ data: { id: 'tw-2' } })
+          .mockResolvedValueOnce({ data: { id: 'tw-3' } });
+
+        const result = await postToTwitter('First tweet\n\n---\n\nSecond tweet\n\n---\n\nThird tweet');
+
+        expect(mockTweet).toHaveBeenCalledTimes(3);
+        expect(mockTweet).toHaveBeenNthCalledWith(1, { text: 'First tweet' });
+        expect(mockTweet).toHaveBeenNthCalledWith(2, {
+          text: 'Second tweet',
+          reply: { in_reply_to_tweet_id: 'tw-1' },
+        });
+        expect(mockTweet).toHaveBeenNthCalledWith(3, {
+          text: 'Third tweet',
+          reply: { in_reply_to_tweet_id: 'tw-2' },
+        });
+        expect(result).toEqual({
+          platformPostId: 'tw-1',
+          url: 'https://twitter.com/i/web/status/tw-1',
+          threadIds: ['tw-1', 'tw-2', 'tw-3'],
+        });
+      },
+      // Real (unmocked) 1s inter-tweet delay x2 between three chained
+      // tweets — longer than jest's 5s default test timeout.
+      10000
+    );
+
+    it('a single part (no delimiter) still posts as one plain tweet, no threadIds', async () => {
+      mockTweet.mockResolvedValue({ data: { id: 'tw-solo' } });
+
+      const result = await postToTwitter('Just one tweet');
+
+      expect(mockTweet).toHaveBeenCalledTimes(1);
+      expect(mockTweet).toHaveBeenCalledWith('Just one tweet');
+      expect(result.threadIds).toBeUndefined();
+    });
+  });
 });

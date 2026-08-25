@@ -64,6 +64,7 @@ export function startScheduler(storage: TrendPostStorage): { stop: () => void } 
       const result = await runPublishSweep(storage);
       if (result.published.length > 0 || result.failed.length > 0) {
         console.log(`[scheduler] ${result.summary}`);
+        storage.log('SWEEP', undefined, undefined, result.summary);
       }
     } catch (err) {
       console.error('[scheduler] sweep failed:', err instanceof Error ? err.message : err);

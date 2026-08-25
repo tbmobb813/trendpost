@@ -14,12 +14,15 @@ export function registerContentRoutes(app: Hono, storage: TrendPostStorage): voi
       return c.json({ error: 'topic and platform are required' }, 400);
     }
     return c.json(
-      await generateContent({
-        topic: body.topic,
-        platform: body.platform,
-        tone: body.tone,
-        context: body.context,
-      })
+      await generateContent(
+        {
+          topic: body.topic,
+          platform: body.platform,
+          tone: body.tone,
+          context: body.context,
+        },
+        storage
+      )
     );
   });
 

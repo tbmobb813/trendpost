@@ -88,6 +88,16 @@ export class TrendPostStorage {
       CREATE INDEX IF NOT EXISTS idx_posts_status ON scheduled_posts(status);
       CREATE INDEX IF NOT EXISTS idx_posts_scheduled ON scheduled_posts(scheduled_at);
       CREATE INDEX IF NOT EXISTS idx_posts_platform ON scheduled_posts(platform);
+
+      CREATE TABLE IF NOT EXISTS run_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        event TEXT NOT NULL,
+        platform TEXT,
+        post_id TEXT,
+        detail TEXT,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_log_created ON run_log(created_at);
     `);
   }
 
@@ -99,6 +109,7 @@ export class TrendPostStorage {
     scheduledAt: Date;
     tags?: string[];
     campaignId?: string;
+    status?: PostStatus;
   }): ScheduledPost {
     const id = randomUUID();
     const now = new Date();
@@ -107,7 +118,7 @@ export class TrendPostStorage {
       .prepare(
         `
       INSERT INTO scheduled_posts (id, content, platform, scheduled_at, status, created_at, tags, campaign_id)
-      VALUES (?, ?, ?, ?, 'scheduled', ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `
       )
       .run(
@@ -115,6 +126,7 @@ export class TrendPostStorage {
         params.content,
         params.platform,
         params.scheduledAt.toISOString(),
+        params.status ?? 'scheduled',
         now.toISOString(),
         JSON.stringify(params.tags ?? []),
         params.campaignId ?? null
@@ -260,6 +272,50 @@ export class TrendPostStorage {
       source: r.source as CampaignSource,
       createdAt: new Date(r.created_at as string),
     }));
+  }
+
+  // ─── AUDIT LOG ──────────────────────────────────────────────────
+
+  log(event: string, platform?: string, postId?: string, detail?: string): void {
+    this.db
+      .prepare(`INSERT INTO run_log (event, platform, post_id, detail, created_at) VALUES (?, ?, ?, ?, ?)`)
+      .run(event, platform ?? null, postId ?? null, detail ?? null, new Date().toISOString());
+  }
+
+  recentLogs(limit = 100): {
+    id: number;
+    event: string;
+    platform: string | null;
+    postId: string | null;
+    detail: string | null;
+    createdAt: Date;
+  }[] {
+    const rows = this.db
+      .prepare('SELECT * FROM run_log ORDER BY id DESC LIMIT ?')
+      .all(limit) as Record<string, unknown>[];
+    return rows.map((r) => ({
+      id: r.id as number,
+      event: r.event as string,
+      platform: (r.platform as string | null) ?? null,
+      postId: (r.post_id as string | null) ?? null,
+      detail: (r.detail as string | null) ?? null,
+      createdAt: new Date(r.created_at as string),
+    }));
+  }
+
+  // ─── STATS ────────────────────────────────────────────────────
+
+  getStats(): { total: number; draft: number; scheduled: number; published: number; failed: number } {
+    const rows = this.db
+      .prepare('SELECT status, COUNT(*) as c FROM scheduled_posts GROUP BY status')
+      .all() as { status: PostStatus; c: number }[];
+    const byStatus: Record<PostStatus, number> = { draft: 0, scheduled: 0, published: 0, failed: 0 };
+    let total = 0;
+    for (const row of rows) {
+      byStatus[row.status] = row.c;
+      total += row.c;
+    }
+    return { total, ...byStatus };
   }
 
   private mapPost(r: Record<string, unknown>): ScheduledPost {

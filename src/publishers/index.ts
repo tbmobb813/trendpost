@@ -6,6 +6,7 @@ import { postToFacebook, postToInstagram } from './meta';
 export interface PublishResult {
   platformPostId: string;
   url?: string;
+  threadIds?: string[];
 }
 
 export async function publishToPlatform(

@@ -1,6 +1,14 @@
 import { Hono } from 'hono';
 import { TrendPostStorage, Platform, PostStatus } from '../storage';
-import { schedulePost, listPosts, deletePost, publishPost, markPublished } from '../content';
+import {
+  schedulePost,
+  listPosts,
+  deletePost,
+  publishPost,
+  markPublished,
+  approvePost,
+  approveAllDrafts,
+} from '../content';
 import { runPublishSweep } from '../scheduler';
 
 export function registerPostRoutes(app: Hono, storage: TrendPostStorage): void {
@@ -11,6 +19,7 @@ export function registerPostRoutes(app: Hono, storage: TrendPostStorage): void {
       scheduledAt?: string;
       tags?: string[];
       campaignId?: string;
+      autoApprove?: boolean;
     }>();
     if (!body.content || !body.platform || !body.scheduledAt) {
       return c.json({ error: 'content, platform, and scheduledAt are required' }, 400);
@@ -22,9 +31,20 @@ export function registerPostRoutes(app: Hono, storage: TrendPostStorage): void {
         scheduledAt: body.scheduledAt,
         tags: body.tags,
         campaignId: body.campaignId,
+        autoApprove: body.autoApprove,
       }),
       201
     );
+  });
+
+  app.post('/api/posts/approve-all', (c) => {
+    return c.json(approveAllDrafts(storage));
+  });
+
+  app.post('/api/posts/:id/approve', (c) => {
+    const post = approvePost(storage, c.req.param('id'));
+    if (!post) return c.json({ error: 'post not found' }, 404);
+    return c.json(post);
   });
 
   app.get('/api/posts', (c) => {

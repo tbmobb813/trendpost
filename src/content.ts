@@ -85,12 +85,15 @@ details) to fill the gap — write a solid, topic-focused post that stays honest
 what you actually know.`;
 
 // ── GENERATE CONTENT ────────────────────────────────────────────
-export async function generateContent(params: {
-  topic: string;
-  platform: Platform;
-  tone?: string;
-  context?: string;
-}): Promise<{ content: string; platform: Platform; topic: string }> {
+export async function generateContent(
+  params: {
+    topic: string;
+    platform: Platform;
+    tone?: string;
+    context?: string;
+  },
+  storage?: TrendPostStorage
+): Promise<{ content: string; platform: Platform; topic: string }> {
   const { topic, platform, tone } = params;
   const context = params.context ?? defaultBusinessContext();
 
@@ -100,19 +103,25 @@ ${context ? `Business context: ${context}` : ''}
 
 Return ONLY the post content. No labels, no explanations, no quotes around it.`;
 
-  const response = await client.messages.create({
-    model: MODEL,
-    max_tokens: 1024,
-    system: CONTENT_SYSTEM_PROMPT,
-    messages: [{ role: 'user', content: prompt }],
-  });
+  try {
+    const response = await client.messages.create({
+      model: MODEL,
+      max_tokens: 1024,
+      system: CONTENT_SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: prompt }],
+    });
 
-  const content = response.content
-    .filter((b): b is Anthropic.TextBlock => b.type === 'text')
-    .map((b) => b.text)
-    .join('');
+    const content = response.content
+      .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+      .map((b) => b.text)
+      .join('');
 
-  return { content, platform, topic };
+    storage?.log('GENERATED', platform, undefined, topic);
+    return { content, platform, topic };
+  } catch (err) {
+    storage?.log('GEN_ERROR', platform, undefined, err instanceof Error ? err.message : String(err));
+    throw err;
+  }
 }
 
 // ── GENERATE CONTENT PLAN ───────────────────────────────────────
@@ -182,6 +191,7 @@ Return only valid JSON array. No markdown fences.`;
     })
   );
 
+  storage.log('PLAN_GENERATED', undefined, undefined, `${saved.length} idea(s) across ${platforms.join(', ')}`);
   return { ideas: saved, totalGenerated: saved.length };
 }
 
@@ -258,14 +268,22 @@ export async function publishPost(
   try {
     const result = await publishToPlatform(post.platform, post.content);
     storage.updatePostStatus(postId, 'published', undefined, result.platformPostId);
+    storage.log('POSTED', post.platform, postId, result.url);
   } catch (err) {
-    storage.updatePostStatus(postId, 'failed', err instanceof Error ? err.message : String(err));
+    const message = err instanceof Error ? err.message : String(err);
+    storage.updatePostStatus(postId, 'failed', message);
+    storage.log('FAILED', post.platform, postId, message);
   }
 
   return storage.getPost(postId)!;
 }
 
 // ── SCHEDULE POST ──────────────────────────────────────────────
+// autoApprove decides whether the post lands as 'scheduled' (goes out on
+// its own once due) or 'draft' (sits until approvePost/approveAllDrafts
+// promotes it) — defaults to the AUTO_APPROVE env var so unattended batch
+// generation and the scheduler behave consistently with what a human
+// scheduling one post at a time gets by default.
 export function schedulePost(
   storage: TrendPostStorage,
   params: {
@@ -274,15 +292,43 @@ export function schedulePost(
     scheduledAt: string;
     tags?: string[];
     campaignId?: string;
+    autoApprove?: boolean;
   }
 ): ScheduledPost {
-  return storage.createPost({
+  const autoApprove = params.autoApprove ?? process.env.AUTO_APPROVE === 'true';
+  const post = storage.createPost({
     content: params.content,
     platform: params.platform,
     scheduledAt: new Date(params.scheduledAt),
     tags: params.tags,
     campaignId: params.campaignId,
+    status: autoApprove ? 'scheduled' : 'draft',
   });
+  storage.log(autoApprove ? 'SCHEDULED' : 'DRAFTED', post.platform, post.id);
+  return post;
+}
+
+// ── APPROVE POST ───────────────────────────────────────────────
+// Promotes a single draft to scheduled — the only real state transition
+// this performs; calling it on an already-scheduled/published/failed post
+// just re-sets it to 'scheduled', same as the original prototype's
+// unconditional approve endpoint.
+export function approvePost(storage: TrendPostStorage, postId: string): ScheduledPost | null {
+  const post = storage.getPost(postId);
+  if (!post) return null;
+  storage.updatePostStatus(postId, 'scheduled');
+  storage.log('APPROVED', post.platform, postId);
+  return storage.getPost(postId);
+}
+
+// ── APPROVE ALL DRAFTS ────────────────────────────────────────────
+export function approveAllDrafts(storage: TrendPostStorage): { approved: number } {
+  const drafts = storage.listPosts({ status: 'draft' });
+  for (const post of drafts) {
+    storage.updatePostStatus(post.id, 'scheduled');
+  }
+  storage.log('APPROVED_ALL', undefined, undefined, `${drafts.length} draft(s)`);
+  return { approved: drafts.length };
 }
 
 // ── LIST SCHEDULED POSTS ───────────────────────────────────────

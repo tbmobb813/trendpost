@@ -49,6 +49,17 @@ required.
 - **Built-in scheduler** — an in-process interval loop publishes due posts
   automatically; a failed publish lands in `status: failed` with a
   diagnostic error rather than retrying blindly or silently dropping it.
+  Only `scheduled` posts are swept — `draft` posts are never auto-published.
+- **Draft → approve workflow** — controlled by `AUTO_APPROVE` in `.env`.
+  When `false` (the default), newly scheduled posts land as `draft` and
+  need an explicit approve before the scheduler will touch them
+  (`POST /api/posts/:id/approve` or `.../approve-all`). Set `AUTO_APPROVE=true`
+  to skip review and have new posts go straight to `scheduled`.
+- **Twitter/X threads** — content containing a `\n\n---\n\n` separator
+  publishes as a reply-chain thread instead of a single tweet.
+- **Audit log** — every generate/schedule/approve/publish event is recorded
+  independently of post state (`GET /api/logs`), so history survives even
+  after a post is deleted.
 - **REST API** — every feature accessible over HTTP; see routes below.
 - **SQLite storage** — one file, zero external database, `draft → scheduled
   → published/failed` state machine.
@@ -63,12 +74,17 @@ required.
 | `POST /api/content/plan-from-timeline` | Turn a launch timeline into dated content ideas (no LLM call) |
 | `POST /api/content/analyze` | Score a post draft and suggest a specific rewrite |
 | `POST /api/campaigns` / `GET /api/campaigns` | Create / list campaigns |
-| `POST /api/posts` / `GET /api/posts` | Schedule / list posts (`status`, `platform`, `daysAhead`, `daysAgo`, `dueOnly` filters) |
+| `POST /api/posts` / `GET /api/posts` | Schedule / list posts (`status`, `platform`, `daysAhead`, `daysAgo`, `dueOnly` filters; `autoApprove` body field overrides the `.env` default per-call) |
 | `DELETE /api/posts/:id` | Delete a scheduled post |
+| `POST /api/posts/:id/approve` | Promote a single draft to scheduled |
+| `POST /api/posts/approve-all` | Promote every draft to scheduled |
 | `POST /api/posts/:id/publish` | Publish a post immediately |
 | `POST /api/posts/:id/mark-published` | Self-report a post published outside this system |
 | `GET /api/ideas` | List generated content ideas |
+| `GET /api/stats` | Post counts by status (`draft`/`scheduled`/`published`/`failed`) plus total |
+| `GET /api/logs` | Recent audit log entries (`?limit=`) |
 | `POST /api/tasks/publish-due-posts` | Manually trigger the same sweep the scheduler runs automatically |
+| `POST /api/verify/{anthropic,twitter,linkedin,facebook,instagram}` | Stateless credential check — makes one live call to the platform, never persists what you send it |
 | `GET /health` | Health check |
 
 ## Configuration
