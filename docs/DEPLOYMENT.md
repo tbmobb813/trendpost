@@ -37,6 +37,20 @@ npm run build
 npm start
 ```
 
+If you'll use YouTube content repurposing (`sourceType: "youtube"` on
+`POST /api/repurpose`) outside Docker, install `yt-dlp` and `deno` on the
+host first — both are already bundled in the Docker image, but a bare
+Node.js install needs them separately:
+
+```bash
+pip install yt-dlp   # or download the standalone binary from its releases page
+curl -fsSL https://deno.land/install.sh | sh
+```
+
+Without them, everything else works normally — only `sourceType: "youtube"`
+requests fail, with a clear "yt-dlp is not installed" error rather than a
+crash. `sourceType: "url"` and `"text"` don't need either binary.
+
 The scheduler starts automatically with the server — no separate cron job
 needed. It sweeps for due posts every `PUBLISH_CHECK_INTERVAL_MS` (default 5
 minutes) and publishes each one via the credentials configured below. A post

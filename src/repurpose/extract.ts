@@ -1,5 +1,12 @@
 import { JSDOM } from 'jsdom';
 import { Readability } from '@mozilla/readability';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
+
+const execFileAsync = promisify(execFile);
 
 export interface ExtractedSource {
   title: string;
@@ -53,62 +60,79 @@ function parseYoutubeVideoId(url: string): string {
   throw new Error(`Could not parse a YouTube video ID out of "${url}".`);
 }
 
-function decodeXmlEntities(s: string): string {
-  return s
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)));
+// Strips WEBVTT structure down to plain spoken text: the header, cue-timing
+// lines, inline tags like <c> or <00:00:01.000>, and consecutive duplicate
+// lines — YouTube's auto-caption VTT output repeats overlapping text across
+// cues by design (a rolling-caption artifact, not a parsing bug), so naive
+// concatenation would repeat every sentence 2-3 times.
+function parseVtt(vtt: string): string {
+  const lines = vtt
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l && l !== 'WEBVTT' && !l.startsWith('Kind:') && !l.startsWith('Language:'))
+    .filter((l) => !/^\d\d:\d\d:\d\d[.,]\d+ --> \d\d:\d\d:\d\d[.,]\d+/.test(l))
+    .filter((l) => !/^\d+$/.test(l)) // bare cue-number lines
+    .map((l) => l.replace(/<[^>]+>/g, '').trim())
+    .filter(Boolean);
+
+  const deduped: string[] = [];
+  for (const line of lines) {
+    if (deduped[deduped.length - 1] !== line) deduped.push(line);
+  }
+  return deduped.join(' ').replace(/\s+/g, ' ').trim();
 }
 
-// Scrapes YouTube's public (unofficial, undocumented) timedtext endpoint —
-// the same technique third-party "youtube transcript" tools use. There is
-// no official API for fetching captions on a video you don't own, so this
-// is the only free option; it can break if YouTube changes its page
-// structure, which is why NoCaptionsError exists as a distinct, expected
-// failure mode rather than something the caller has to guess about from a
-// generic error.
+// Uses yt-dlp (a system-level dependency — see docs/DEPLOYMENT.md) instead
+// of scraping YouTube's page HTML directly. yt-dlp is actively maintained
+// by a large community keeping pace with YouTube's changes, which our own
+// hand-rolled scraper could not — verified in testing to successfully pull
+// captions on a video our previous scraper reported as caption-less.
+// --print forces yt-dlp into simulate mode unless --no-simulate is also
+// passed, which would silently suppress the subtitle-writing side effect
+// this depends on.
 export async function extractYoutubeTranscript(url: string): Promise<ExtractedSource> {
   const videoId = parseYoutubeVideoId(url);
+  const tempDir = mkdtempSync(join(tmpdir(), 'trendpost-yt-'));
 
-  const watchRes = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
-    headers: { 'User-Agent': USER_AGENT, 'Accept-Language': 'en-US,en;q=0.9' },
-  });
-  if (!watchRes.ok) {
-    throw new Error(`Failed to fetch YouTube watch page for ${videoId}: ${watchRes.status}`);
-  }
-  const html = await watchRes.text();
-
-  const titleMatch = html.match(/"title":"((?:[^"\\]|\\.)*)"/);
-  const title = titleMatch ? JSON.parse(`"${titleMatch[1]}"`) : videoId;
-
-  const tracksMatch = html.match(/"captionTracks":(\[.*?\])/);
-  if (!tracksMatch) throw new NoCaptionsError(videoId);
-
-  let tracks: { baseUrl: string; languageCode: string }[];
   try {
-    tracks = JSON.parse(tracksMatch[1]);
-  } catch {
-    throw new NoCaptionsError(videoId);
+    let stdout: string;
+    try {
+      ({ stdout } = await execFileAsync('yt-dlp', [
+        '--write-auto-subs',
+        '--write-subs',
+        '--sub-langs',
+        'en',
+        '--skip-download',
+        '--no-simulate',
+        '--print',
+        'title',
+        '-o',
+        join(tempDir, '%(id)s'),
+        '--',
+        url,
+      ]));
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === 'ENOENT') {
+        throw new Error(
+          'yt-dlp is not installed on this server. It is required for YouTube repurposing — ' +
+            'see docs/DEPLOYMENT.md for install instructions, or use sourceType: "text" to paste a transcript manually.'
+        );
+      }
+      throw new Error(
+        `yt-dlp failed for ${videoId}: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
+
+    const title = stdout.trim() || videoId;
+    const vttFile = readdirSync(tempDir).find((f) => f.endsWith('.vtt'));
+    if (!vttFile) throw new NoCaptionsError(videoId);
+
+    const text = parseVtt(readFileSync(join(tempDir, vttFile), 'utf8'));
+    if (text.length < 100) throw new NoCaptionsError(videoId);
+
+    return { title, text };
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
   }
-  if (!tracks.length) throw new NoCaptionsError(videoId);
-
-  // Prefer an English track if one exists, otherwise take whatever's first.
-  const track = tracks.find((t) => t.languageCode?.startsWith('en')) ?? tracks[0];
-  const captionUrl = track.baseUrl.replace(/\\u0026/g, '&');
-
-  const captionRes = await fetch(captionUrl, { headers: { 'User-Agent': USER_AGENT } });
-  if (!captionRes.ok) throw new NoCaptionsError(videoId);
-  const xml = await captionRes.text();
-
-  const lines = [...xml.matchAll(/<text[^>]*>([\s\S]*?)<\/text>/g)].map((m) =>
-    decodeXmlEntities(m[1]).replace(/\n/g, ' ').trim()
-  );
-  const text = lines.join(' ').replace(/\s+/g, ' ').trim();
-
-  if (text.length < 100) throw new NoCaptionsError(videoId);
-
-  return { title, text };
 }

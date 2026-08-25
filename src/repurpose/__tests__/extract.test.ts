@@ -13,8 +13,40 @@ jest.mock('@mozilla/readability', () => ({
   Readability: jest.fn().mockImplementation(() => ({ parse: jest.fn() })),
 }));
 
+// extractYoutubeTranscript now shells out to the real yt-dlp binary via
+// child_process.execFile (wrapped in util.promisify). Mocking execFile lets
+// these tests run without yt-dlp installed in CI — the mock simulates the
+// one real side effect the code depends on (a .vtt file appearing in the
+// temp dir yt-dlp was told to write to via -o) rather than trying to fake
+// promisify's internals.
+jest.mock('child_process', () => ({ execFile: jest.fn() }));
+
+import { execFile } from 'child_process';
+import { writeFileSync } from 'fs';
 import { Readability } from '@mozilla/readability';
 import { extractFromUrl, extractYoutubeTranscript, NoCaptionsError } from '../extract';
+
+type ExecFileCallback = (error: NodeJS.ErrnoException | null, result?: { stdout: string; stderr: string }) => void;
+
+function mockYtDlp(result: { stdout: string; vtt?: string } | NodeJS.ErrnoException) {
+  (execFile as unknown as jest.Mock).mockImplementation((...callArgs: unknown[]) => {
+    const args = callArgs[1] as string[];
+    const callback = callArgs[callArgs.length - 1] as ExecFileCallback;
+
+    if (result instanceof Error) {
+      callback(result as NodeJS.ErrnoException);
+      return;
+    }
+
+    if (result.vtt !== undefined) {
+      const oIndex = args.indexOf('-o');
+      const template = args[oIndex + 1]; // e.g. /tmp/trendpost-yt-xxxx/%(id)s
+      const dir = template.slice(0, template.lastIndexOf('/'));
+      writeFileSync(`${dir}/video.en.vtt`, result.vtt);
+    }
+    callback(null, { stdout: result.stdout, stderr: '' });
+  });
+}
 
 function mockReadabilityResult(result: { title: string; textContent: string } | null) {
   (Readability as unknown as jest.Mock).mockImplementation(() => ({ parse: () => result }));
@@ -85,51 +117,41 @@ describe('extractFromUrl()', () => {
 });
 
 describe('extractYoutubeTranscript()', () => {
-  const originalFetch = global.fetch;
-  afterEach(() => {
-    global.fetch = originalFetch;
-  });
+  afterEach(() => jest.clearAllMocks());
 
-  function mockWatchAndCaptions(captionXml: string | null) {
-    global.fetch = jest.fn().mockImplementation((url: string) => {
-      if (url.includes('/watch?v=')) {
-        const tracks = captionXml
-          ? '"captionTracks":[{"baseUrl":"https://caption.example/track","languageCode":"en"}]'
-          : '';
-        return Promise.resolve({
-          ok: true,
-          text: async () => `<html>"title":"Test Video Title"${tracks ? ',' + tracks : ''}</html>`,
-        });
-      }
-      if (url === 'https://caption.example/track') {
-        return Promise.resolve({ ok: true, text: async () => captionXml });
-      }
-      return Promise.resolve({ ok: false, status: 404, text: async () => '' });
-    }) as unknown as typeof fetch;
-  }
+  it('extracts and de-duplicates transcript text from the .vtt file yt-dlp writes', async () => {
+    const vtt = `WEBVTT
+Kind: captions
+Language: en
 
-  it('extracts and concatenates transcript text from the caption track', async () => {
-    const xml =
-      '<transcript><text start="0" dur="2">Hello there</text><text start="2" dur="2">this is a test video transcript with enough content to pass the length check repeated several times over.</text></transcript>';
-    mockWatchAndCaptions(xml);
+00:00:00.000 --> 00:00:02.000
+Hello there
+
+00:00:02.000 --> 00:00:04.000
+Hello there
+
+00:00:04.000 --> 00:00:06.000
+this is a test video transcript with enough content to pass the length check repeated several times over.`;
+    mockYtDlp({ stdout: 'Test Video Title\n', vtt });
 
     const result = await extractYoutubeTranscript('https://www.youtube.com/watch?v=abcdefghijk');
 
     expect(result.title).toBe('Test Video Title');
-    expect(result.text).toContain('Hello there');
+    // "Hello there" appears twice consecutively in the raw VTT (a real
+    // rolling-caption artifact) — parseVtt should collapse it to once.
+    expect(result.text.match(/Hello there/g)).toHaveLength(1);
     expect(result.text).toContain('test video transcript');
   });
 
   it('parses video IDs from youtu.be short links', async () => {
-    const xml = `<transcript><text>${'content '.repeat(30)}</text></transcript>`;
-    mockWatchAndCaptions(xml);
+    mockYtDlp({ stdout: 'Title\n', vtt: `WEBVTT\n\n00:00:00.000 --> 00:00:02.000\n${'content '.repeat(30)}` });
 
     const result = await extractYoutubeTranscript('https://youtu.be/abcdefghijk');
     expect(result.text.length).toBeGreaterThan(50);
   });
 
-  it('throws NoCaptionsError when no captionTracks are present', async () => {
-    mockWatchAndCaptions(null);
+  it('throws NoCaptionsError when yt-dlp writes no .vtt file (video has no captions)', async () => {
+    mockYtDlp({ stdout: 'Captionless Video\n' }); // no vtt field — nothing written
     await expect(extractYoutubeTranscript('https://www.youtube.com/watch?v=abcdefghijk')).rejects.toThrow(
       NoCaptionsError
     );
@@ -138,6 +160,23 @@ describe('extractYoutubeTranscript()', () => {
   it('throws a plain error when the URL has no parseable video ID', async () => {
     await expect(extractYoutubeTranscript('https://example.com/not-youtube')).rejects.toThrow(
       /Could not parse a YouTube video ID/
+    );
+  });
+
+  it('throws a clear, distinguishable error when yt-dlp is not installed (ENOENT)', async () => {
+    const enoent = Object.assign(new Error('spawn yt-dlp ENOENT'), { code: 'ENOENT' });
+    mockYtDlp(enoent);
+
+    await expect(extractYoutubeTranscript('https://www.youtube.com/watch?v=abcdefghijk')).rejects.toThrow(
+      /yt-dlp is not installed/
+    );
+  });
+
+  it('wraps a non-ENOENT yt-dlp failure (e.g. video removed/private) into a clear error', async () => {
+    mockYtDlp(new Error('ERROR: Video unavailable') as NodeJS.ErrnoException);
+
+    await expect(extractYoutubeTranscript('https://www.youtube.com/watch?v=abcdefghijk')).rejects.toThrow(
+      /yt-dlp failed/
     );
   });
 });

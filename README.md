@@ -102,13 +102,33 @@ existing long-form material into posts:
 
 `sourceType` is one of:
 - `"url"` — fetches the page and extracts the main article text (`@mozilla/readability`).
-- `"youtube"` — fetches the video's transcript. **This scrapes YouTube's public,
-  undocumented caption endpoint — there is no official API for captions on a
-  video you don't own.** It can break if YouTube changes its page structure.
-  If it fails, resubmit with `sourceType: "text"` and the transcript pasted
-  manually (e.g. copied from YouTube's own transcript panel).
+- `"youtube"` — fetches the video's transcript via [yt-dlp](https://github.com/yt-dlp/yt-dlp)
+  (see **System requirements** below — this needs `yt-dlp` and `deno` installed).
+  There is no official API for captions on a video you don't own; yt-dlp is
+  actively maintained and far more reliable than scraping YouTube's page
+  HTML directly, but it can still fail (private/age-restricted videos,
+  captions genuinely disabled). If it fails, resubmit with
+  `sourceType: "text"` and the transcript pasted manually.
 - `"text"` — the `source` string is used directly, no extraction — the
   manual fallback for both of the above.
+
+### System requirements for YouTube repurposing
+
+`sourceType: "youtube"` shells out to two external binaries — already
+installed in the Docker image, but required separately for a bare
+Node.js install:
+
+- **yt-dlp** — `pip install yt-dlp`, or download the standalone binary
+  from [its releases page](https://github.com/yt-dlp/yt-dlp/releases/latest).
+- **Deno** — required alongside yt-dlp; recent YouTube extraction needs a
+  JS runtime to execute player-response decryption, and yt-dlp silently
+  returns incomplete results without one. Install via
+  [deno.land/install.sh](https://deno.land/install.sh) or your package
+  manager.
+
+If `yt-dlp` isn't on `PATH`, `sourceType: "youtube"` requests fail with a
+clear "yt-dlp is not installed" error rather than a crash — `sourceType: "url"`
+and `"text"` are unaffected either way.
 
 Long sources (a full-episode transcript) get condensed via a chunk-summarize
 pass before post generation, so requests against long sources can take
