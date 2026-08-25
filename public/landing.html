@@ -1,0 +1,1125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TrendPost — Social Media Autopilot for Developers</title>
+<meta name="description" content="Self-hosted AI social media automation built for indie hackers and solo founders. Own your stack. No credit limits. No subscriptions to tools you don't control.">
+<!--
+  STAGED, NOT LIVE. Not linked from index.html/setup.html or served by
+  any route — added to the repo for later use, not launched.
+
+  Known placeholders to resolve before shipping this for real:
+  - #waitlist form has no backend (console.log only) — needs a real
+    signup endpoint (email service, Airtable, etc.) before going live.
+  - The "47 developers on the list" counter is scripted to randomly
+    tick upward on a timer (see tickCount()) — fabricated social proof.
+    Replace with a real count or remove before this page is public.
+  - The terminal demo shows a `trendpost` CLI (generate/queue/run
+    commands) that doesn't exist — TrendPost is REST-API-only today.
+    Illustrative, not a real product surface.
+  - Pricing section's Cloud ($12/mo) and Team ($29/mo) hosted tiers are
+    not built — only the free self-hosted product exists right now.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0a;
+    --surface: #111111;
+    --surface2: #181818;
+    --border: rgba(255,255,255,0.07);
+    --border-bright: rgba(255,255,255,0.15);
+    --text: #f0ede8;
+    --muted: #6b6862;
+    --accent: #c8f564;
+    --accent2: #7f77dd;
+    --accent-dim: rgba(200,245,100,0.08);
+    --mono: 'DM Mono', monospace;
+    --display: 'Syne', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 14px;
+    line-height: 1.7;
+    overflow-x: hidden;
+  }
+
+  /* Grain overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='1'/%3E%3C/svg%3E");
+    opacity: 0.025;
+    pointer-events: none;
+    z-index: 1000;
+  }
+
+  /* ── NAV ── */
+  nav {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 100;
+    padding: 20px 48px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border);
+    background: rgba(10,10,10,0.85);
+    backdrop-filter: blur(12px);
+  }
+
+  .nav-logo {
+    font-family: var(--display);
+    font-weight: 800;
+    font-size: 18px;
+    letter-spacing: -0.02em;
+    color: var(--text);
+    text-decoration: none;
+  }
+
+  .nav-logo span { color: var(--accent); }
+
+  .nav-tag {
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .nav-cta {
+    font-size: 12px;
+    color: var(--accent);
+    border: 1px solid rgba(200,245,100,0.3);
+    padding: 7px 18px;
+    border-radius: 2px;
+    text-decoration: none;
+    letter-spacing: 0.04em;
+    transition: all 0.2s;
+  }
+  .nav-cta:hover { background: var(--accent-dim); border-color: var(--accent); }
+
+  /* ── HERO ── */
+  .hero {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 120px 48px 80px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Subtle grid */
+  .hero::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(200,245,100,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(200,245,100,0.03) 1px, transparent 1px);
+    background-size: 60px 60px;
+    mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 0%, transparent 100%);
+  }
+
+  /* Glow blob */
+  .hero::after {
+    content: '';
+    position: absolute;
+    top: -200px; right: -200px;
+    width: 700px; height: 700px;
+    background: radial-gradient(circle, rgba(127,119,221,0.12) 0%, transparent 65%);
+    pointer-events: none;
+  }
+
+  .hero-eyebrow {
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 28px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    animation: fadeUp 0.6s ease both;
+  }
+
+  .hero-eyebrow::before {
+    content: '';
+    display: block;
+    width: 32px; height: 1px;
+    background: var(--accent);
+  }
+
+  .hero-headline {
+    font-family: var(--display);
+    font-weight: 800;
+    font-size: clamp(42px, 7vw, 88px);
+    line-height: 0.95;
+    letter-spacing: -0.03em;
+    max-width: 900px;
+    margin-bottom: 32px;
+    animation: fadeUp 0.6s 0.1s ease both;
+  }
+
+  .hero-headline .line2 {
+    color: var(--accent);
+    display: block;
+  }
+
+  .hero-headline .line3 {
+    color: var(--muted);
+    display: block;
+    font-weight: 600;
+  }
+
+  .hero-sub {
+    font-size: 16px;
+    color: var(--muted);
+    max-width: 520px;
+    line-height: 1.8;
+    margin-bottom: 48px;
+    animation: fadeUp 0.6s 0.2s ease both;
+    font-family: var(--mono);
+    font-weight: 300;
+  }
+
+  .hero-sub strong { color: var(--text); font-weight: 400; }
+
+  /* Waitlist form */
+  .waitlist-form {
+    display: flex;
+    gap: 0;
+    max-width: 480px;
+    animation: fadeUp 0.6s 0.3s ease both;
+  }
+
+  .waitlist-input {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border-bright);
+    border-right: none;
+    border-radius: 2px 0 0 2px;
+    padding: 14px 18px;
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .waitlist-input::placeholder { color: var(--muted); }
+  .waitlist-input:focus { border-color: var(--accent); }
+
+  .waitlist-btn {
+    background: var(--accent);
+    color: #0a0a0a;
+    border: none;
+    padding: 14px 24px;
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    border-radius: 0 2px 2px 0;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+  .waitlist-btn:hover { background: #d4ff70; transform: translateX(2px); }
+  .waitlist-btn.submitted { background: var(--surface2); color: var(--accent); border: 1px solid var(--accent); border-left: none; cursor: default; transform: none; }
+
+  .form-note {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 12px;
+    animation: fadeUp 0.6s 0.4s ease both;
+  }
+
+  /* Intent question */
+  .intent-wrap {
+    margin-top: 28px;
+    animation: fadeUp 0.6s 0.45s ease both;
+    display: none;
+  }
+  .intent-wrap.show { display: block; }
+  .intent-label {
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  .intent-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .intent-chip {
+    padding: 6px 14px;
+    border: 1px solid var(--border-bright);
+    border-radius: 2px;
+    font-size: 12px;
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: var(--mono);
+    background: transparent;
+  }
+  .intent-chip:hover { border-color: var(--accent); color: var(--accent); }
+  .intent-chip.selected { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+
+  /* ── TERMINAL BLOCK ── */
+  .terminal-wrap {
+    position: absolute;
+    right: 48px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: min(520px, 42vw);
+    animation: fadeUp 0.8s 0.3s ease both;
+  }
+
+  .terminal {
+    background: var(--surface);
+    border: 1px solid var(--border-bright);
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: 0 40px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.03);
+  }
+
+  .term-bar {
+    background: var(--surface2);
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .term-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+  }
+  .term-dot:nth-child(1) { background: #ff5f57; }
+  .term-dot:nth-child(2) { background: #febc2e; }
+  .term-dot:nth-child(3) { background: #28c840; }
+
+  .term-title {
+    margin-left: auto;
+    font-size: 11px;
+    color: var(--muted);
+    margin-right: auto;
+    letter-spacing: 0.04em;
+  }
+
+  .term-body {
+    padding: 20px 20px;
+    font-size: 12px;
+    line-height: 2;
+    color: #7a8a6a;
+  }
+
+  .term-line { display: flex; gap: 10px; }
+  .term-prompt { color: var(--accent); flex-shrink: 0; }
+  .term-cmd { color: var(--text); }
+  .term-out { color: #7a8a6a; padding-left: 20px; }
+  .term-green { color: #28c840; }
+  .term-purple { color: var(--accent2); }
+  .term-yellow { color: #febc2e; }
+  .term-dim { color: var(--muted); }
+
+  .cursor {
+    display: inline-block;
+    width: 7px; height: 13px;
+    background: var(--accent);
+    vertical-align: middle;
+    animation: blink 1.1s step-end infinite;
+  }
+
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+  /* ── SOCIAL PROOF ── */
+  .proof-bar {
+    padding: 20px 48px;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 48px;
+    overflow-x: auto;
+    background: var(--surface);
+  }
+
+  .proof-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .proof-num {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 22px;
+    color: var(--accent);
+  }
+
+  .proof-label {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.3;
+  }
+
+  .proof-divider {
+    width: 1px;
+    height: 32px;
+    background: var(--border-bright);
+    flex-shrink: 0;
+  }
+
+  /* ── SECTION SHARED ── */
+  section {
+    padding: 100px 48px;
+  }
+
+  .section-label {
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .section-label::before {
+    content: '';
+    display: block;
+    width: 24px; height: 1px;
+    background: var(--accent);
+  }
+
+  .section-title {
+    font-family: var(--display);
+    font-weight: 800;
+    font-size: clamp(28px, 4vw, 52px);
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    margin-bottom: 20px;
+  }
+
+  .section-sub {
+    font-size: 15px;
+    color: var(--muted);
+    max-width: 560px;
+    line-height: 1.8;
+    font-weight: 300;
+  }
+
+  /* ── COMPARE TABLE ── */
+  .compare-section { background: var(--surface); }
+
+  .compare-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border-bright);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-top: 56px;
+  }
+
+  .compare-col {
+    background: var(--bg);
+    padding: 0;
+  }
+
+  .compare-col.highlight { background: var(--surface2); }
+
+  .compare-header {
+    padding: 24px 24px 20px;
+    border-bottom: 1px solid var(--border);
+    min-height: 100px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+  }
+
+  .compare-name {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 16px;
+    margin-bottom: 4px;
+  }
+
+  .compare-tagline { font-size: 11px; color: var(--muted); }
+
+  .compare-badge {
+    display: inline-block;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 3px 10px;
+    border-radius: 2px;
+    background: var(--accent-dim);
+    border: 1px solid rgba(200,245,100,0.2);
+    color: var(--accent);
+    margin-bottom: 8px;
+    align-self: flex-start;
+  }
+
+  .compare-row {
+    padding: 14px 24px;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 52px;
+  }
+
+  .compare-row:last-child { border-bottom: none; }
+
+  .check { color: var(--accent); font-size: 14px; flex-shrink: 0; }
+  .cross { color: var(--muted); font-size: 14px; flex-shrink: 0; }
+  .partial { color: #febc2e; font-size: 14px; flex-shrink: 0; }
+
+  .compare-row-label {
+    padding: 14px 24px;
+    border-bottom: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.04em;
+    display: flex;
+    align-items: center;
+    min-height: 52px;
+    background: rgba(255,255,255,0.02);
+  }
+
+  /* ── HOW IT WORKS ── */
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border-bright);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-top: 56px;
+  }
+
+  .step-card {
+    background: var(--bg);
+    padding: 36px 32px;
+    transition: background 0.2s;
+  }
+  .step-card:hover { background: var(--surface); }
+
+  .step-num {
+    font-family: var(--display);
+    font-size: 48px;
+    font-weight: 800;
+    color: rgba(200,245,100,0.12);
+    line-height: 1;
+    margin-bottom: 16px;
+    letter-spacing: -0.04em;
+  }
+
+  .step-icon {
+    font-size: 20px;
+    margin-bottom: 14px;
+    display: block;
+  }
+
+  .step-title {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 17px;
+    margin-bottom: 10px;
+    letter-spacing: -0.01em;
+  }
+
+  .step-desc {
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.8;
+    font-weight: 300;
+  }
+
+  /* ── FEATURES GRID ── */
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border-bright);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-top: 56px;
+  }
+
+  .feature-card {
+    background: var(--bg);
+    padding: 32px;
+    transition: background 0.2s;
+  }
+  .feature-card:hover { background: var(--surface); }
+
+  .feature-tag {
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 12px;
+  }
+
+  .feature-title {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 18px;
+    margin-bottom: 10px;
+    letter-spacing: -0.01em;
+  }
+
+  .feature-body {
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.8;
+    font-weight: 300;
+  }
+
+  /* ── PRICING TEASER ── */
+  .pricing-section { background: var(--surface); }
+
+  .pricing-cards {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border-bright);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-top: 56px;
+  }
+
+  .pricing-card {
+    background: var(--bg);
+    padding: 36px 32px;
+  }
+
+  .pricing-card.featured {
+    background: var(--surface2);
+    position: relative;
+  }
+
+  .featured-tag {
+    position: absolute;
+    top: 0; left: 50%; transform: translate(-50%,0);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    background: var(--accent);
+    color: #0a0a0a;
+    padding: 4px 14px;
+    font-family: var(--display);
+    font-weight: 700;
+  }
+
+  .plan-name {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 15px;
+    margin-bottom: 8px;
+    letter-spacing: -0.01em;
+  }
+
+  .plan-price {
+    font-family: var(--display);
+    font-weight: 800;
+    font-size: 40px;
+    letter-spacing: -0.03em;
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+
+  .plan-price sup {
+    font-size: 18px;
+    vertical-align: super;
+    font-weight: 600;
+  }
+
+  .plan-price span { font-size: 14px; color: var(--muted); font-weight: 400; }
+
+  .plan-desc {
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 28px;
+    line-height: 1.6;
+  }
+
+  .plan-features {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .plan-features li {
+    font-size: 12px;
+    color: var(--muted);
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  }
+
+  .plan-features li::before {
+    content: '—';
+    color: var(--accent);
+    flex-shrink: 0;
+  }
+
+  /* ── WAITLIST BOTTOM ── */
+  .waitlist-section {
+    text-align: center;
+    padding: 120px 48px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .waitlist-section::before {
+    content: '';
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 800px; height: 400px;
+    background: radial-gradient(ellipse, rgba(200,245,100,0.05) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .waitlist-section .section-title { max-width: 600px; margin: 0 auto 16px; }
+  .waitlist-section .section-sub { margin: 0 auto 48px; text-align: center; }
+
+  .waitlist-form-center {
+    display: flex;
+    gap: 0;
+    max-width: 440px;
+    margin: 0 auto;
+  }
+
+  /* ── FOOTER ── */
+  footer {
+    padding: 32px 48px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--surface);
+  }
+
+  .footer-logo {
+    font-family: var(--display);
+    font-weight: 800;
+    font-size: 15px;
+    letter-spacing: -0.02em;
+  }
+  .footer-logo span { color: var(--accent); }
+
+  .footer-links {
+    display: flex;
+    gap: 32px;
+  }
+
+  .footer-links a {
+    font-size: 12px;
+    color: var(--muted);
+    text-decoration: none;
+    transition: color 0.15s;
+  }
+  .footer-links a:hover { color: var(--text); }
+
+  .footer-copy { font-size: 11px; color: var(--muted); }
+
+  /* ── ANIMATIONS ── */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .reveal {
+    opacity: 0;
+    transform: translateY(24px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+  .reveal.visible { opacity: 1; transform: none; }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 900px) {
+    nav { padding: 16px 24px; }
+    .hero { padding: 100px 24px 60px; }
+    .terminal-wrap { display: none; }
+    section { padding: 70px 24px; }
+    .proof-bar { padding: 20px 24px; }
+    .compare-grid, .steps, .features-grid, .pricing-cards { grid-template-columns: 1fr; }
+    .compare-grid { display: flex; flex-direction: column; }
+    .waitlist-section { padding: 80px 24px; }
+    footer { padding: 24px; flex-direction: column; gap: 20px; text-align: center; }
+  }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <a href="#" class="nav-logo">Trend<span>Post</span></a>
+  <a href="#waitlist" class="nav-cta">Join waitlist</a>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-eyebrow">Open source · Self-hosted · AI-powered</div>
+  <h1 class="hero-headline">
+    Social media<br>
+    <span class="line2">on autopilot.</span>
+    <span class="line3">Your stack. Your rules.</span>
+  </h1>
+  <p class="hero-sub">
+    TrendPost is the social media automation engine built <strong>by developers, for developers.</strong><br>
+    No credit limits. No monthly SaaS tax. No vendor lock-in. Just AI-generated content posting to all your platforms — fully automated, fully yours.
+  </p>
+  <form class="waitlist-form" id="hero-form" onsubmit="handleSubmit(event,'hero')">
+    <input class="waitlist-input" type="email" placeholder="your@email.com" required>
+    <button class="waitlist-btn" type="submit">Join waitlist →</button>
+  </form>
+  <p class="form-note">No spam. Just early access + a say in what gets built next.</p>
+
+  <div class="intent-wrap" id="intent-wrap">
+    <div class="intent-label">// what brings you here?</div>
+    <div class="intent-options">
+      <button class="intent-chip" onclick="selectIntent(this)">Replacing a paid tool</button>
+      <button class="intent-chip" onclick="selectIntent(this)">Growing my indie brand</button>
+      <button class="intent-chip" onclick="selectIntent(this)">Want to self-host</button>
+      <button class="intent-chip" onclick="selectIntent(this)">Building something similar</button>
+      <button class="intent-chip" onclick="selectIntent(this)">SaaS founder / marketer</button>
+    </div>
+  </div>
+
+  <!-- Terminal -->
+  <div class="terminal-wrap">
+    <div class="terminal">
+      <div class="term-bar">
+        <div class="term-dot"></div>
+        <div class="term-dot"></div>
+        <div class="term-dot"></div>
+        <span class="term-title">trendpost — autopilot</span>
+      </div>
+      <div class="term-body">
+        <div class="term-line"><span class="term-prompt">$</span><span class="term-cmd">curl -X POST /api/content/plan -d '{"platforms":["twitter","linkedin","instagram","facebook"]}'</span></div>
+        <div class="term-out term-dim">✦ Generating content for 4 platforms...</div>
+        <div class="term-out term-green">✓ Twitter/X  — 247 chars  [scheduled 9:00 AM]</div>
+        <div class="term-out term-green">✓ LinkedIn   — 312 words  [scheduled 9:00 AM]</div>
+        <div class="term-out term-green">✓ Instagram  — 8 hashtags [scheduled 10:00 AM]</div>
+        <div class="term-out term-green">✓ Facebook   — 156 words  [scheduled 12:00 PM]</div>
+        <br>
+        <div class="term-line"><span class="term-prompt">$</span><span class="term-cmd">curl /api/stats</span></div>
+        <div class="term-out term-purple">21 posts scheduled · 0 failed · scheduler ON</div>
+        <br>
+        <div class="term-line"><span class="term-prompt">$</span><span class="term-cmd">curl -X POST /api/content/plan -d '{"weeksAhead":1,"postsPerWeek":7,...}'</span></div>
+        <div class="term-out term-dim">Generating 7-day content plan...</div>
+        <div class="term-out term-green">✓ 14 posts queued across 4 platforms</div>
+        <div class="term-out term-yellow">→ Review at localhost:3000/</div>
+        <br>
+        <div class="term-line"><span class="term-prompt">$</span><span class="term-cmd"><span class="cursor"></span></span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SOCIAL PROOF BAR -->
+<div class="proof-bar reveal">
+  <div class="proof-item">
+    <div class="proof-num">4</div>
+    <div class="proof-label">platforms<br>supported</div>
+  </div>
+  <div class="proof-divider"></div>
+  <div class="proof-item">
+    <div class="proof-num">100%</div>
+    <div class="proof-label">self-hostable<br>open source</div>
+  </div>
+  <div class="proof-divider"></div>
+  <div class="proof-item">
+    <div class="proof-num">$0</div>
+    <div class="proof-label">platform fee<br>to run it</div>
+  </div>
+  <div class="proof-divider"></div>
+  <div class="proof-item">
+    <div class="proof-num">∞</div>
+    <div class="proof-label">posts per month<br>no credit limits</div>
+  </div>
+  <div class="proof-divider"></div>
+  <div class="proof-item">
+    <div class="proof-num">5min</div>
+    <div class="proof-label">setup with<br>Docker</div>
+  </div>
+</div>
+
+<!-- HOW IT WORKS -->
+<section>
+  <div class="section-label">How it works</div>
+  <h2 class="section-title reveal">Set it up once.<br>Post forever.</h2>
+  <p class="section-sub reveal">Three steps from zero to full autopilot. No configuration hell.</p>
+
+  <div class="steps reveal">
+    <div class="step-card">
+      <div class="step-num">01</div>
+      <div class="step-title">Deploy your instance</div>
+      <p class="step-desc">Clone the repo, fill in your API keys, run <code style="color:var(--accent);font-size:12px">docker compose up</code>. Your backend is live in under 5 minutes. Runs on any VPS — $5/mo Hetzner, DigitalOcean, wherever.</p>
+    </div>
+    <div class="step-card">
+      <div class="step-num">02</div>
+      <div class="step-title">Define your brand voice</div>
+      <p class="step-desc">Tell TrendPost who you are, what you build, and what you want to talk about. The AI learns your niche, your tone, and your product — then writes content that actually sounds like you.</p>
+    </div>
+    <div class="step-card">
+      <div class="step-num">03</div>
+      <div class="step-title">Turn on the scheduler</div>
+      <p class="step-desc">Generate posts on demand or in a batch, review and approve them (or set AUTO_APPROVE to skip that step), and the built-in scheduler publishes them on time — directly to Twitter, LinkedIn, Instagram, and Facebook via official APIs. No middleman.</p>
+    </div>
+  </div>
+</section>
+
+<!-- COMPARE -->
+<section class="compare-section">
+  <div class="section-label">vs. the alternatives</div>
+  <h2 class="section-title reveal">Why not just use Blotato?</h2>
+  <p class="section-sub reveal">Blotato is a great product — if you want to rent someone else's infrastructure forever. TrendPost is for builders who want to own the machine.</p>
+
+  <div class="compare-grid reveal">
+    <!-- Labels col -->
+    <div class="compare-col">
+      <div class="compare-header" style="background:rgba(255,255,255,0.01)">
+        <div class="compare-name" style="color:var(--muted)">Feature</div>
+      </div>
+      <div class="compare-row-label">Monthly platform cost</div>
+      <div class="compare-row-label">Credit limits</div>
+      <div class="compare-row-label">Self-hostable</div>
+      <div class="compare-row-label">Open source</div>
+      <div class="compare-row-label">Brand voice training</div>
+      <div class="compare-row-label">Custom AI model</div>
+      <div class="compare-row-label">Direct API publishing</div>
+      <div class="compare-row-label">No-code automation</div>
+      <div class="compare-row-label">Content repurposing</div>
+      <div class="compare-row-label">Your data, your server</div>
+    </div>
+
+    <!-- Blotato col -->
+    <div class="compare-col">
+      <div class="compare-header">
+        <div class="compare-name">Blotato</div>
+        <div class="compare-tagline">$29–$499/month</div>
+      </div>
+      <div class="compare-row"><span class="cross">—</span> $29–$499/mo forever</div>
+      <div class="compare-row"><span class="cross">—</span> 1,250–5,000 credits</div>
+      <div class="compare-row"><span class="cross">—</span> Cloud only</div>
+      <div class="compare-row"><span class="cross">—</span> Closed source</div>
+      <div class="compare-row"><span class="partial">◐</span> Prompt engineering</div>
+      <div class="compare-row"><span class="cross">—</span> Their model</div>
+      <div class="compare-row"><span class="check">✓</span> Yes</div>
+      <div class="compare-row"><span class="check">✓</span> n8n / Make.com</div>
+      <div class="compare-row"><span class="check">✓</span> Strong feature</div>
+      <div class="compare-row"><span class="cross">—</span> Their servers</div>
+    </div>
+
+    <!-- TrendPost col -->
+    <div class="compare-col highlight">
+      <div class="compare-header">
+        <span class="compare-badge">TrendPost</span>
+        <div class="compare-name">TrendPost</div>
+        <div class="compare-tagline">Self-host free · Cloud coming</div>
+      </div>
+      <div class="compare-row"><span class="check">✓</span> $0 platform fee</div>
+      <div class="compare-row"><span class="check">✓</span> Unlimited</div>
+      <div class="compare-row"><span class="check">✓</span> Yes — Docker</div>
+      <div class="compare-row"><span class="check">✓</span> Yes</div>
+      <div class="compare-row"><span class="check">✓</span> Deep brand context</div>
+      <div class="compare-row"><span class="check">✓</span> Bring your own key</div>
+      <div class="compare-row"><span class="check">✓</span> Yes — native</div>
+      <div class="compare-row"><span class="partial">◐</span> REST API + dashboard</div>
+      <div class="compare-row"><span class="partial">◐</span> Coming soon</div>
+      <div class="compare-row"><span class="check">✓</span> Your server always</div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section>
+  <div class="section-label">Features</div>
+  <h2 class="section-title reveal">Everything you need.<br>Nothing you don't.</h2>
+
+  <div class="features-grid reveal">
+    <div class="feature-card">
+      <div class="feature-tag">// AI engine</div>
+      <div class="feature-title">Claude-powered content generation</div>
+      <p class="feature-body">Powered by Claude, with your brand voice, product context, and content niche baked in. Every post sounds like you — not like a generic AI tool filled every blank.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-tag">// scheduler</div>
+      <div class="feature-title">Built-in publish scheduler</div>
+      <p class="feature-body">An in-process scheduler sweeps for due posts and publishes them via official platform APIs at their scheduled time. Generate content on demand or in a 7-day batch — queue it for review, or set AUTO_APPROVE to skip straight to scheduled.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-tag">// publishing</div>
+      <div class="feature-title">Native API publishing — no middleman</div>
+      <p class="feature-body">Posts go directly from your server to Twitter v2, LinkedIn UGC, and Meta Graph API. No Buffer. No Zapier. No third-party service that can go down, raise prices, or read your content.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-tag">// dashboard</div>
+      <div class="feature-title">Full queue management UI</div>
+      <p class="feature-body">Visual content calendar, approve/edit/delete drafts, generate on-demand, and monitor real post/idea/campaign activity — all from a clean web dashboard running on your own server.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-tag">// developer-first</div>
+      <div class="feature-title">REST API + full source access</div>
+      <p class="feature-body">Every feature available via REST API. Integrate with your existing n8n, Make.com, or custom tooling. Fork it, extend it, build on it — it's yours.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-tag">// roadmap</div>
+      <div class="feature-title">Content repurposing — coming soon</div>
+      <p class="feature-body">Feed in a YouTube video, a blog post, or a PDF — get platform-optimized posts back automatically. Threads, carousels, and image generation on the roadmap for early access members.</p>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING TEASER -->
+<section class="pricing-section">
+  <div class="section-label">Pricing (early access)</div>
+  <h2 class="section-title reveal">Simple. Honest. Developer-fair.</h2>
+  <p class="section-sub reveal">Waitlist members lock in early-access pricing. These numbers will go up at launch.</p>
+
+  <div class="pricing-cards reveal">
+    <div class="pricing-card">
+      <div class="plan-name">Self-Host</div>
+      <div class="plan-price">$0<span>/mo</span></div>
+      <p class="plan-desc">Forever free. Host it yourself. You bring the VPS and the API keys.</p>
+      <ul class="plan-features">
+        <li>Full source code on GitHub</li>
+        <li>All 4 platform publishers</li>
+        <li>AI content generation</li>
+        <li>Dashboard + scheduler</li>
+        <li>Community support</li>
+      </ul>
+    </div>
+    <div class="pricing-card featured">
+      <div class="featured-tag">Most popular</div>
+      <div class="plan-name">Cloud</div>
+      <div class="plan-price"><sup>$</sup>12<span>/mo</span></div>
+      <p class="plan-desc">We host it. You own your data. No setup required — live in 60 seconds.</p>
+      <ul class="plan-features">
+        <li>Everything in Self-Host</li>
+        <li>Managed hosting + uptime</li>
+        <li>Unlimited posts, no credits</li>
+        <li>Automatic updates</li>
+        <li>Priority support</li>
+      </ul>
+    </div>
+    <div class="pricing-card">
+      <div class="plan-name">Team</div>
+      <div class="plan-price"><sup>$</sup>29<span>/mo</span></div>
+      <p class="plan-desc">Multiple brands, multiple team members, advanced analytics.</p>
+      <ul class="plan-features">
+        <li>Everything in Cloud</li>
+        <li>Up to 5 brand profiles</li>
+        <li>Team access + roles</li>
+        <li>Content repurposing (beta)</li>
+        <li>Slack / Discord alerts</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- BOTTOM WAITLIST -->
+<section class="waitlist-section" id="waitlist">
+  <div class="section-label" style="justify-content:center;margin-bottom:20px">Early access</div>
+  <h2 class="section-title reveal">Be first. Shape the product.</h2>
+  <p class="section-sub reveal">Waitlist members get early access, locked-in pricing, and a direct line to the founder to tell us what to build next.</p>
+
+  <form class="waitlist-form-center" id="bottom-form" onsubmit="handleSubmit(event,'bottom')">
+    <input class="waitlist-input" type="email" placeholder="your@email.com" required>
+    <button class="waitlist-btn" type="submit">Join waitlist →</button>
+  </form>
+  <p class="form-note" style="text-align:center;margin-top:12px">Already <strong id="count" style="color:var(--accent)">47</strong> developers on the list.</p>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-logo">Trend<span>Post</span></div>
+  <div class="footer-links">
+    <a href="https://github.com/tbmobb813/trendpost">GitHub</a>
+    <a href="/docs/DEPLOYMENT.md">Docs</a>
+    <a href="#">Twitter</a>
+  </div>
+  <div class="footer-copy">© 2026 TrendPost. Built in public.</div>
+</footer>
+
+<script>
+// Scroll reveal
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => { if(e.isIntersecting) { e.target.classList.add('visible'); } });
+}, { threshold: 0.1 });
+document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+// PLACEHOLDER: fabricates a slowly-ticking-up waitlist count — there is no
+// real signup count behind this. Replace with a real number (or remove)
+// before this page goes live.
+let count = 47;
+function tickCount() {
+  if (Math.random() > 0.6) {
+    count++;
+    const el = document.getElementById('count');
+    if (el) el.textContent = count;
+  }
+  setTimeout(tickCount, Math.random() * 8000 + 4000);
+}
+tickCount();
+
+// PLACEHOLDER: no real backend — just logs to console. Wire this to a real
+// signup endpoint before this page goes live.
+function handleSubmit(e, formId) {
+  e.preventDefault();
+  const form = e.target;
+  const input = form.querySelector('input');
+  const btn = form.querySelector('button');
+  const email = input.value;
+
+  btn.textContent = '✓ You\'re on the list';
+  btn.classList.add('submitted');
+  input.disabled = true;
+
+  count++;
+  const el = document.getElementById('count');
+  if(el) el.textContent = count;
+
+  if (formId === 'hero') {
+    document.getElementById('intent-wrap').classList.add('show');
+  }
+
+  // In production: POST email to your backend / Airtable / Resend
+  console.log('Waitlist signup:', email);
+}
+
+function selectIntent(chip) {
+  document.querySelectorAll('.intent-chip').forEach(c => c.classList.remove('selected'));
+  chip.classList.add('selected');
+  console.log('Intent:', chip.textContent);
+}
+</script>
+
+</body>
+</html>
