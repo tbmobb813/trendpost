@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TrendPost Setup</title>
+<style>
+:root{
+  --color-background-primary:#ffffff;
+  --color-background-secondary:#f6f6f8;
+  --color-background-warning:#fdf6e3;
+  --color-text-primary:#1b1c1f;
+  --color-text-secondary:#5b5d66;
+  --color-text-tertiary:#9092a0;
+  --color-text-warning:#7a5b06;
+  --color-border-secondary:#d7d8de;
+  --color-border-tertiary:#e7e8ec;
+  --color-border-warning:#e8d69a;
+  --border-radius-lg:10px;
+  --border-radius-md:6px;
+  --font-sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --font-mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-sans);color:var(--color-text-primary);background:var(--color-background-secondary);font-size:14px;padding:20px}
+.wizard{max-width:640px;margin:0 auto;border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);overflow:hidden;background:var(--color-background-primary)}
+.wiz-header{background:var(--color-background-secondary);border-bottom:0.5px solid var(--color-border-tertiary);padding:16px 20px;display:flex;justify-content:space-between;align-items:center}
+.wiz-title{font-size:15px;font-weight:500}
+.wiz-step-count{font-size:12px;color:var(--color-text-tertiary)}
+.progress-bar{height:3px;background:var(--color-background-secondary);border-bottom:0.5px solid var(--color-border-tertiary)}
+.progress-fill{height:100%;background:#7F77DD;transition:width .4s ease}
+.step-nav{display:flex;gap:0;border-bottom:0.5px solid var(--color-border-tertiary);overflow-x:auto}
+.step-pill{padding:10px 14px;font-size:12px;color:var(--color-text-tertiary);cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent;transition:all .15s;display:flex;align-items:center;gap:6px;flex-shrink:0}
+.step-pill.active{color:var(--color-text-primary);border-bottom-color:#7F77DD;font-weight:500}
+.step-pill.done{color:#1D9E75}
+.step-dot{width:16px;height:16px;border-radius:50%;border:1px solid var(--color-border-secondary);display:inline-flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0}
+.step-pill.active .step-dot{background:#7F77DD;border-color:#7F77DD;color:#fff}
+.step-pill.done .step-dot{background:#1D9E75;border-color:#1D9E75;color:#fff}
+.step-body{padding:24px}
+.step-page{display:none}
+.step-page.active{display:block}
+.step-desc{color:var(--color-text-secondary);font-size:13px;margin-bottom:20px;line-height:1.6}
+.field-group{margin-bottom:16px}
+.field-label{font-size:12px;color:var(--color-text-secondary);margin-bottom:6px;display:flex;justify-content:space-between;align-items:center}
+.field-hint{font-size:11px;color:var(--color-text-tertiary)}
+input[type=text],input[type=password],input[type=url]{font-family:var(--font-sans);font-size:13px;color:var(--color-text-primary);background:var(--color-background-primary);border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);padding:8px 10px;width:100%;transition:border-color .15s}
+input:focus{outline:none;border-color:#7F77DD}
+.reveal-btn{background:none;border:none;cursor:pointer;color:var(--color-text-tertiary);font-size:11px;font-family:var(--font-sans);padding:0}
+.reveal-btn:hover{color:var(--color-text-secondary)}
+.input-wrap{position:relative}
+.input-wrap input{padding-right:56px}
+.input-wrap .reveal-btn{position:absolute;right:10px;top:50%;transform:translateY(-50%)}
+.link-row{font-size:12px;color:var(--color-text-tertiary);margin-top:8px}
+.link-row a{color:#7F77DD;text-decoration:none}
+.link-row a:hover{text-decoration:underline}
+.test-btn{padding:7px 14px;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);background:transparent;color:var(--color-text-secondary);cursor:pointer;font-size:12px;font-family:var(--font-sans);transition:all .15s;margin-top:12px}
+.test-btn:hover{background:var(--color-background-secondary)}
+.test-btn:disabled{opacity:.5;cursor:not-allowed}
+.status-row{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12px;min-height:22px}
+.status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.dot-idle{background:var(--color-border-secondary)}
+.dot-testing{background:#EF9F27;animation:pulse .8s infinite}
+.dot-ok{background:#1D9E75}
+.dot-err{background:#E24B4A}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.section-divider{border:none;border-top:0.5px solid var(--color-border-tertiary);margin:20px 0}
+.footer-row{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-top:0.5px solid var(--color-border-tertiary);background:var(--color-background-secondary)}
+.btn{padding:8px 16px;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);background:transparent;color:var(--color-text-primary);cursor:pointer;font-size:13px;font-family:var(--font-sans);transition:all .15s}
+.btn:hover{background:var(--color-background-primary)}
+.btn.primary{background:#7F77DD;color:#fff;border-color:#7F77DD}
+.btn.primary:hover{background:#534AB7}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.summary-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px}
+.summary-card{border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:12px;display:flex;align-items:center;gap:10px}
+.summary-icon{font-size:18px;width:32px;height:32px;border-radius:50%;background:var(--color-background-secondary);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.summary-name{font-size:13px;font-weight:500}
+.summary-status{font-size:11px}
+.s-ok{color:#1D9E75}
+.s-skip{color:var(--color-text-tertiary)}
+.s-warn{color:#BA7517}
+.env-block{background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:14px;font-family:var(--font-mono);font-size:11px;color:var(--color-text-secondary);white-space:pre;overflow-x:auto;margin-top:12px;line-height:1.8}
+.copy-btn{padding:5px 12px;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);background:transparent;color:var(--color-text-secondary);cursor:pointer;font-size:11px;font-family:var(--font-sans);transition:all .15s}
+.copy-btn:hover{background:var(--color-background-secondary)}
+.warning-box{background:var(--color-background-warning);border:0.5px solid var(--color-border-warning);border-radius:var(--border-radius-md);padding:10px 12px;font-size:12px;color:var(--color-text-warning);margin-bottom:16px;line-height:1.6}
+</style>
+</head>
+<body>
+
+<div class="wizard">
+  <div class="wiz-header">
+    <div class="wiz-title">TrendPost — Setup Wizard</div>
+    <div class="wiz-step-count" id="step-count">Step 1 of 6</div>
+  </div>
+  <div class="progress-bar"><div class="progress-fill" id="prog" style="width:16.6%"></div></div>
+
+  <div class="step-nav" id="step-nav">
+    <div class="step-pill active" onclick="goStep(0)"><span class="step-dot" id="dot-0">1</span> Anthropic</div>
+    <div class="step-pill" onclick="goStep(1)"><span class="step-dot" id="dot-1">2</span> Twitter / X</div>
+    <div class="step-pill" onclick="goStep(2)"><span class="step-dot" id="dot-2">3</span> LinkedIn</div>
+    <div class="step-pill" onclick="goStep(3)"><span class="step-dot" id="dot-3">4</span> Facebook</div>
+    <div class="step-pill" onclick="goStep(4)"><span class="step-dot" id="dot-4">5</span> Instagram</div>
+    <div class="step-pill" onclick="goStep(5)"><span class="step-dot" id="dot-5">6</span> Review</div>
+  </div>
+
+  <div class="step-body">
+
+    <!-- Step 0: Anthropic -->
+    <div class="step-page active" id="page-0">
+      <div class="step-desc">Your Anthropic API key powers all AI content generation. This is the only <em>required</em> credential — the platform keys can be added one at a time.</div>
+      <div class="field-group">
+        <div class="field-label">API Key <span class="field-hint">starts with sk-ant-</span></div>
+        <div class="input-wrap">
+          <input type="password" id="anthropic-key" placeholder="sk-ant-api03-..." oninput="clearStatus('anthropic')">
+          <button class="reveal-btn" onclick="toggleReveal('anthropic-key',this)">show</button>
+        </div>
+        <div class="link-row">Get yours at console.anthropic.com → API Keys</div>
+      </div>
+      <button class="test-btn" onclick="testAnthropic()">Test connection</button>
+      <div class="status-row"><div class="status-dot dot-idle" id="anthropic-dot"></div><span id="anthropic-msg" style="color:var(--color-text-tertiary)">Not tested</span></div>
+    </div>
+
+    <!-- Step 1: Twitter -->
+    <div class="step-page" id="page-1">
+      <div class="step-desc">Twitter/X requires 4 credentials from your Developer Portal. You need <strong>Read + Write</strong> app permissions and an Access Token/Secret pair for your account.</div>
+      <div class="warning-box">Free tier = 500 tweets/month. For sustained posting across platforms, the Basic tier ($100/mo) is recommended.</div>
+      <div class="field-group">
+        <div class="field-label">API Key (Consumer Key)</div>
+        <div class="input-wrap"><input type="password" id="tw-key" placeholder="API key..." oninput="clearStatus('twitter')"><button class="reveal-btn" onclick="toggleReveal('tw-key',this)">show</button></div>
+      </div>
+      <div class="field-group">
+        <div class="field-label">API Secret (Consumer Secret)</div>
+        <div class="input-wrap"><input type="password" id="tw-secret" placeholder="API secret..." oninput="clearStatus('twitter')"><button class="reveal-btn" onclick="toggleReveal('tw-secret',this)">show</button></div>
+      </div>
+      <div class="field-group">
+        <div class="field-label">Access Token</div>
+        <div class="input-wrap"><input type="password" id="tw-token" placeholder="Access token..." oninput="clearStatus('twitter')"><button class="reveal-btn" onclick="toggleReveal('tw-token',this)">show</button></div>
+      </div>
+      <div class="field-group">
+        <div class="field-label">Access Token Secret</div>
+        <div class="input-wrap"><input type="password" id="tw-tsecret" placeholder="Access token secret..." oninput="clearStatus('twitter')"><button class="reveal-btn" onclick="toggleReveal('tw-tsecret',this)">show</button></div>
+      </div>
+      <div class="link-row" style="margin-bottom:12px">Get all four at developer.twitter.com → Your App → Keys and Tokens</div>
+      <button class="test-btn" onclick="testTwitter()">Test connection</button>
+      <div class="status-row"><div class="status-dot dot-idle" id="twitter-dot"></div><span id="twitter-msg" style="color:var(--color-text-tertiary)">Not tested</span></div>
+    </div>
+
+    <!-- Step 2: LinkedIn -->
+    <div class="step-page" id="page-2">
+      <div class="step-desc">LinkedIn requires an OAuth 2.0 access token with the <code style="font-family:var(--font-mono);font-size:12px;padding:1px 4px;background:var(--color-background-secondary);border-radius:3px">w_member_social</code> scope, plus your Person URN.</div>
+      <div class="field-group">
+        <div class="field-label">Access Token <span class="field-hint">expires every 60 days</span></div>
+        <div class="input-wrap"><input type="password" id="li-token" placeholder="LinkedIn OAuth token..." oninput="clearStatus('linkedin')"><button class="reveal-btn" onclick="toggleReveal('li-token',this)">show</button></div>
+      </div>
+      <div class="field-group">
+        <div class="field-label">Person URN <span class="field-hint">format: urn:li:person:XXXXXXXX or just the id</span></div>
+        <input type="text" id="li-urn" placeholder="urn:li:person:AbCdEfGh" oninput="clearStatus('linkedin')">
+        <div class="link-row">Find it: an authenticated GET to api.linkedin.com/v2/me returns your <code style="font-size:11px">id</code> — or just click "Test connection" below with the token filled in and leave this blank first, it'll tell you the real id if it doesn't match.</div>
+      </div>
+      <button class="test-btn" onclick="testLinkedIn()">Test connection</button>
+      <div class="status-row"><div class="status-dot dot-idle" id="linkedin-dot"></div><span id="linkedin-msg" style="color:var(--color-text-tertiary)">Not tested</span></div>
+    </div>
+
+    <!-- Step 3: Facebook -->
+    <div class="step-page" id="page-3">
+      <div class="step-desc">Facebook posting requires a Page Access Token (not a personal token) with <code style="font-family:var(--font-mono);font-size:12px;padding:1px 4px;background:var(--color-background-secondary);border-radius:3px">pages_manage_posts</code> permission, plus your Page ID.</div>
+      <div class="field-group">
+        <div class="field-label">Page Access Token</div>
+        <div class="input-wrap"><input type="password" id="fb-token" placeholder="Page access token..." oninput="clearStatus('facebook')"><button class="reveal-btn" onclick="toggleReveal('fb-token',this)">show</button></div>
+      </div>
+      <div class="field-group">
+        <div class="field-label">Facebook Page ID</div>
+        <input type="text" id="fb-pageid" placeholder="123456789012345" oninput="clearStatus('facebook')">
+        <div class="link-row">Find it: your Facebook Page → About → scroll to Page ID</div>
+      </div>
+      <div class="link-row" style="margin-bottom:12px">Get a token at developers.facebook.com → Graph API Explorer → select your Page</div>
+      <button class="test-btn" onclick="testFacebook()">Test connection</button>
+      <div class="status-row"><div class="status-dot dot-idle" id="facebook-dot"></div><span id="facebook-msg" style="color:var(--color-text-tertiary)">Not tested</span></div>
+    </div>
+
+    <!-- Step 4: Instagram -->
+    <div class="step-page" id="page-4">
+      <div class="step-desc">Instagram uses the same Meta access token as Facebook, but needs your Instagram Business Account ID. Posting also requires a default image URL, added below — not needed to test the connection.</div>
+      <div class="field-group">
+        <div class="field-label">Instagram Business Account ID</div>
+        <input type="text" id="ig-accountid" placeholder="17841400000000000" oninput="clearStatus('instagram')">
+        <div class="link-row">Find it: Meta Business Suite → Settings → Instagram account</div>
+      </div>
+      <div class="field-group">
+        <div class="field-label">Default image URL <span class="field-hint">used for every feed post — required to actually publish, not to test</span></div>
+        <input type="url" id="ig-imgurl" placeholder="https://yoursite.com/brand-graphic.png">
+        <div class="link-row">Host a 1080×1080 branded graphic publicly.</div>
+      </div>
+      <button class="test-btn" onclick="testInstagram()">Test connection</button>
+      <div class="status-row"><div class="status-dot dot-idle" id="instagram-dot"></div><span id="instagram-msg" style="color:var(--color-text-tertiary)">Not tested</span></div>
+    </div>
+
+    <!-- Step 5: Review + generate .env -->
+    <div class="step-page" id="page-5">
+      <div style="font-size:15px;font-weight:500;margin-bottom:16px">Setup summary</div>
+      <div class="summary-grid" id="summary-grid"></div>
+      <hr class="section-divider">
+      <div style="font-size:13px;font-weight:500;margin-bottom:4px">Brand voice</div>
+      <div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:12px">Used as the default business context when generating content without an explicit topic-context override.</div>
+      <div class="field-group"><div class="field-label">Brand name</div><input type="text" id="rv-brand" placeholder="Your Brand" oninput="buildEnv()"></div>
+      <div class="field-group"><div class="field-label">Product name</div><input type="text" id="rv-product" placeholder="Your Product" oninput="buildEnv()"></div>
+      <div class="field-group"><div class="field-label">Brand voice</div><input type="text" id="rv-voice" placeholder="Direct, founder-authentic, slightly technical." oninput="buildEnv()"></div>
+      <hr class="section-divider">
+      <div style="font-size:13px;font-weight:500;margin-bottom:4px">Scheduler settings</div>
+      <div class="field-group">
+        <div class="field-label">Posts per day <span class="field-hint">informational — actual pacing is up to what you schedule</span></div>
+        <select id="ppd" onchange="buildEnv()" style="font-size:13px">
+          <option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option>
+        </select>
+      </div>
+      <div class="field-group">
+        <div class="field-label">Timezone</div>
+        <select id="tz" onchange="buildEnv()" style="font-size:13px">
+          <option value="America/New_York" selected>Eastern (ET)</option>
+          <option value="America/Chicago">Central (CT)</option>
+          <option value="America/Denver">Mountain (MT)</option>
+          <option value="America/Los_Angeles">Pacific (PT)</option>
+          <option value="UTC">UTC</option>
+        </select>
+      </div>
+      <div class="field-group">
+        <div class="field-label">Auto-approve</div>
+        <select id="auto-approve" onchange="buildEnv()" style="font-size:13px">
+          <option value="false" selected>false</option>
+          <option value="true">true</option>
+        </select>
+      </div>
+      <hr class="section-divider">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-size:13px;font-weight:500">Generated .env file</div>
+        <button class="copy-btn" onclick="copyEnv()">Copy</button>
+      </div>
+      <div class="link-row" style="margin-bottom:8px">Paste this into TrendPost's <code style="font-size:11px">.env</code> file and restart the server — this wizard never sends these values anywhere except the "Test connection" checks above, and never saves them itself.</div>
+      <div class="env-block" id="env-output"></div>
+    </div>
+
+  </div>
+
+  <div class="footer-row">
+    <button class="btn" id="back-btn" onclick="prevStep()" disabled>← Back</button>
+    <div style="display:flex;gap:8px">
+      <button class="btn" onclick="skipStep()" id="skip-btn">Skip platform</button>
+      <button class="btn primary" id="next-btn" onclick="nextStep()">Next →</button>
+    </div>
+  </div>
+</div>
+<div style="max-width:640px;margin:12px auto 0;text-align:center"><a href="/" style="font-size:12px;color:var(--color-text-tertiary)">← Back to dashboard</a></div>
+
+<script>
+let current = 0;
+const total = 6;
+const statuses = {anthropic:'idle',twitter:'idle',linkedin:'idle',facebook:'idle',instagram:'idle'};
+const skipped = {twitter:false,linkedin:false,facebook:false,instagram:false};
+
+function goStep(n) {
+  document.querySelectorAll('.step-page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.step-pill').forEach((p,i)=>{
+    p.classList.remove('active');
+    if(i<n) p.classList.add('done'); else p.classList.remove('done');
+  });
+  document.getElementById('page-'+n).classList.add('active');
+  document.querySelectorAll('.step-pill')[n].classList.add('active');
+  document.getElementById('prog').style.width = ((n+1)/total*100)+'%';
+  document.getElementById('step-count').textContent = `Step ${n+1} of ${total}`;
+  document.getElementById('back-btn').disabled = n===0;
+  document.getElementById('next-btn').textContent = n===total-1 ? 'Done ✓' : 'Next →';
+  const skipBtn = document.getElementById('skip-btn');
+  skipBtn.style.display = (n>0 && n<total-1) ? 'inline-block':'none';
+  if(n===total-1){ buildSummary(); buildEnv(); }
+  current = n;
+}
+
+function nextStep(){ if(current<total-1) goStep(current+1); }
+function prevStep(){ if(current>0) goStep(current-1); }
+function skipStep(){
+  const platforms=['twitter','linkedin','facebook','instagram'];
+  if(current>=1&&current<=4){ skipped[platforms[current-1]]=true; }
+  nextStep();
+}
+
+function toggleReveal(id,btn){
+  const el=document.getElementById(id);
+  const isHidden=el.type==='password';
+  el.type=isHidden?'text':'password';
+  btn.textContent=isHidden?'hide':'show';
+}
+function clearStatus(platform){ setStatus(platform,'idle','Not tested'); }
+
+function setStatus(platform,state,msg){
+  statuses[platform]=state;
+  const dot=document.getElementById(platform+'-dot');
+  const msgEl=document.getElementById(platform+'-msg');
+  dot.className='status-dot dot-'+state;
+  msgEl.textContent=msg;
+  msgEl.style.color = state==='ok'?'#1D9E75':state==='err'?'#E24B4A':state==='testing'?'#BA7517':'var(--color-text-tertiary)';
+}
+
+async function callVerify(path, body, platform) {
+  try {
+    const res = await fetch(path, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+    const data = await res.json();
+    setStatus(platform, data.ok ? 'ok' : 'err', data.message || (data.ok ? 'Connected' : 'Failed'));
+  } catch (e) {
+    setStatus(platform, 'err', 'Network error — is the TrendPost server reachable?');
+  }
+}
+
+function testAnthropic(){
+  const apiKey=document.getElementById('anthropic-key').value.trim();
+  if(!apiKey){setStatus('anthropic','err','Enter your API key first');return;}
+  setStatus('anthropic','testing','Testing...');
+  callVerify('/api/verify/anthropic', {apiKey}, 'anthropic');
+}
+function testTwitter(){
+  const apiKey=document.getElementById('tw-key').value.trim();
+  const apiSecret=document.getElementById('tw-secret').value.trim();
+  const accessToken=document.getElementById('tw-token').value.trim();
+  const accessSecret=document.getElementById('tw-tsecret').value.trim();
+  if(!apiKey||!apiSecret||!accessToken||!accessSecret){setStatus('twitter','err','Fill in all four fields first');return;}
+  setStatus('twitter','testing','Connecting to Twitter / X...');
+  callVerify('/api/verify/twitter', {apiKey,apiSecret,accessToken,accessSecret}, 'twitter');
+}
+function testLinkedIn(){
+  const accessToken=document.getElementById('li-token').value.trim();
+  const personUrn=document.getElementById('li-urn').value.trim();
+  if(!accessToken){setStatus('linkedin','err','Enter your access token first');return;}
+  setStatus('linkedin','testing','Connecting to LinkedIn...');
+  callVerify('/api/verify/linkedin', {accessToken,personUrn: personUrn || 'urn:li:person:unset'}, 'linkedin');
+}
+function testFacebook(){
+  const accessToken=document.getElementById('fb-token').value.trim();
+  const pageId=document.getElementById('fb-pageid').value.trim();
+  if(!accessToken||!pageId){setStatus('facebook','err','Fill in both fields first');return;}
+  setStatus('facebook','testing','Connecting to Facebook...');
+  callVerify('/api/verify/facebook', {accessToken,pageId}, 'facebook');
+}
+function testInstagram(){
+  const accessToken=document.getElementById('fb-token').value.trim();
+  const accountId=document.getElementById('ig-accountid').value.trim();
+  if(!accessToken||!accountId){setStatus('instagram','err','Enter the Facebook Page Access Token (step 4) and Account ID first');return;}
+  setStatus('instagram','testing','Connecting to Instagram...');
+  callVerify('/api/verify/instagram', {accessToken,accountId}, 'instagram');
+}
+
+function buildSummary(){
+  const items=[
+    {key:'anthropic',icon:'✦',name:'Anthropic AI'},
+    {key:'twitter',icon:'𝕏',name:'Twitter / X'},
+    {key:'linkedin',icon:'in',name:'LinkedIn'},
+    {key:'facebook',icon:'f',name:'Facebook'},
+    {key:'instagram',icon:'◎',name:'Instagram'},
+  ];
+  const grid=document.getElementById('summary-grid');
+  grid.innerHTML=items.map(item=>{
+    const s=statuses[item.key];
+    const sk=skipped[item.key];
+    let statusTxt,statusClass;
+    if(sk){statusTxt='Skipped';statusClass='s-skip';}
+    else if(s==='ok'){statusTxt='Connected ✓';statusClass='s-ok';}
+    else if(item.key==='anthropic'&&s!=='ok'){statusTxt='Required — not tested';statusClass='s-warn';}
+    else{statusTxt='Not tested';statusClass='s-skip';}
+    return `<div class="summary-card"><div class="summary-icon">${item.icon}</div><div><div class="summary-name">${item.name}</div><div class="summary-status ${statusClass}">${statusTxt}</div></div></div>`;
+  }).join('');
+}
+
+function buildEnv(){
+  const k=(id)=>document.getElementById(id)?.value?.trim()||'';
+  const autoApprove=document.getElementById('auto-approve')?.value||'false';
+  const ppd=document.getElementById('ppd')?.value||'2';
+  const tz=document.getElementById('tz')?.value||'America/New_York';
+  const brand=k('rv-brand')||'YourBrand';
+  const product=k('rv-product')||'YourProduct';
+  const voice=k('rv-voice')||'Direct, founder-authentic, slightly technical. Building in public.';
+  const env=`ANTHROPIC_API_KEY=${k('anthropic-key')||'sk-ant-...'}
+
+PORT=3000
+DATABASE_PATH=./data/trendpost.db
+PUBLISH_CHECK_INTERVAL_MS=300000
+
+TWITTER_API_KEY=${k('tw-key')}
+TWITTER_API_SECRET=${k('tw-secret')}
+TWITTER_ACCESS_TOKEN=${k('tw-token')}
+TWITTER_ACCESS_SECRET=${k('tw-tsecret')}
+
+LINKEDIN_ACCESS_TOKEN=${k('li-token')}
+LINKEDIN_PERSON_URN=${k('li-urn')}
+
+META_ACCESS_TOKEN=${k('fb-token')}
+FACEBOOK_PAGE_ID=${k('fb-pageid')}
+INSTAGRAM_ACCOUNT_ID=${k('ig-accountid')}
+INSTAGRAM_DEFAULT_IMAGE_URL=${k('ig-imgurl')}
+
+AUTO_APPROVE=${autoApprove}
+POSTS_PER_DAY=${ppd}
+TZ=${tz}
+
+BRAND_NAME=${brand}
+PRODUCT_NAME=${product}
+BRAND_VOICE=${voice}`;
+  document.getElementById('env-output').textContent=env;
+}
+
+function copyEnv(){
+  navigator.clipboard.writeText(document.getElementById('env-output').textContent);
+  const btn=event.target;
+  btn.textContent='Copied!';
+  setTimeout(()=>btn.textContent='Copy',2000);
+}
+
+document.getElementById('skip-btn').style.display='none';
+</script>
+</body>
+</html>

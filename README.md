@@ -100,3 +100,9 @@ shows real post/idea/campaign counts only — TrendPost doesn't ingest
 platform engagement or reach data, so there are no fabricated
 engagement-rate charts. Settings is read-only (edit `.env` and restart
 to change brand voice or scheduling).
+
+A setup wizard ships at `/setup.html` (linked from the dashboard's
+Settings tab) — walks through Anthropic + each platform's credentials,
+tests each one against the real API (`POST /api/verify/*`, stateless —
+nothing is logged or saved server-side), and generates a `.env` block
+to copy into your own `.env` file.
