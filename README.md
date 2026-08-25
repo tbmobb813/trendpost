@@ -21,6 +21,8 @@ docker compose up -d
 curl http://localhost:3000/health
 ```
 
+Then open `http://localhost:3000/` for the dashboard.
+
 **Node.js:**
 
 ```bash
@@ -89,8 +91,12 @@ npm test
 npm run dev   # runs src/server.ts directly with hot reload
 ```
 
-## Status
+## Dashboard
 
-No dashboard UI yet — this ships as a REST API + scheduler, usable via
-`curl` or any HTTP client. A calendar-view dashboard is a planned fast
-follow, not a dropped feature.
+A dashboard ships at `/` — Dashboard, Generate, Queue, Activity, and
+Settings tabs, all wired to the REST API above (no separate frontend
+build step; it's a static page served by the same process). Activity
+shows real post/idea/campaign counts only — TrendPost doesn't ingest
+platform engagement or reach data, so there are no fabricated
+engagement-rate charts. Settings is read-only (edit `.env` and restart
+to change brand voice or scheduling).

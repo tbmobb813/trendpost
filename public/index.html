@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TrendPost</title>
+<style>
+:root{
+  --color-background-primary:#ffffff;
+  --color-background-secondary:#f6f6f8;
+  --color-background-danger:#fdecec;
+  --color-text-primary:#1b1c1f;
+  --color-text-secondary:#5b5d66;
+  --color-text-tertiary:#9092a0;
+  --color-text-danger:#a3271f;
+  --color-border-secondary:#d7d8de;
+  --color-border-tertiary:#e7e8ec;
+  --color-border-danger:#e5b3af;
+  --border-radius-lg:10px;
+  --border-radius-md:6px;
+  --font-sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-sans);color:var(--color-text-primary);background:var(--color-background-secondary);font-size:14px;padding:20px}
+.app{display:grid;grid-template-columns:200px 1fr;min-height:600px;max-width:1200px;margin:0 auto;gap:0;border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);overflow:hidden;background:var(--color-background-primary)}
+.sidebar{background:var(--color-background-secondary);border-right:0.5px solid var(--color-border-tertiary);padding:16px 0;display:flex;flex-direction:column;gap:2px}
+.sidebar-header{padding:0 16px 14px;border-bottom:0.5px solid var(--color-border-tertiary);margin-bottom:8px}
+.logo{font-size:15px;font-weight:500;color:var(--color-text-primary)}
+.logo span{color:#7F77DD}
+.nav-item{padding:8px 16px;cursor:pointer;border-radius:0;font-size:13px;color:var(--color-text-secondary);display:flex;align-items:center;gap:8px;transition:all .15s}
+.nav-item:hover{background:var(--color-background-primary);color:var(--color-text-primary)}
+.nav-item.active{background:var(--color-background-primary);color:var(--color-text-primary);font-weight:500;border-left:2px solid #7F77DD}
+.nav-icon{width:14px;height:14px;display:inline-flex;align-items:center;justify-content:center;font-size:12px}
+.main{background:var(--color-background-primary);overflow-y:auto}
+.tab{display:none;padding:20px}
+.tab.active{display:block}
+.tab-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
+.tab-title{font-size:17px;font-weight:500}
+.btn{padding:7px 14px;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);background:transparent;color:var(--color-text-primary);cursor:pointer;font-size:13px;transition:all .15s;font-family:var(--font-sans)}
+.btn:hover{background:var(--color-background-secondary)}
+.btn.primary{background:#7F77DD;color:#fff;border-color:#7F77DD}
+.btn.primary:hover{background:#534AB7}
+.btn.sm{padding:4px 10px;font-size:12px}
+.btn.danger{border-color:var(--color-border-danger);color:var(--color-text-danger)}
+.btn.danger:hover{background:var(--color-background-danger)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}
+.stat-card{background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:14px;border:0.5px solid var(--color-border-tertiary)}
+.stat-label{font-size:12px;color:var(--color-text-secondary);margin-bottom:6px}
+.stat-val{font-size:22px;font-weight:500}
+.stat-sub{font-size:11px;color:var(--color-text-tertiary);margin-top:3px}
+.platform-badges{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px}
+.badge{padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500;border:0.5px solid}
+.badge.twitter{background:#E6F1FB;color:#0C447C;border-color:#B5D4F4}
+.badge.linkedin{background:#E6F1FB;color:#185FA5;border-color:#85B7EB}
+.badge.instagram{background:#FBEAF0;color:#72243E;border-color:#F4C0D1}
+.badge.facebook{background:#E6F1FB;color:#042C53;border-color:#B5D4F4}
+.badge.active{opacity:1}
+.badge.inactive{opacity:.4}
+.queue-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-bottom:20px}
+.day-cell{border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:8px;min-height:90px;transition:border-color .15s}
+.day-cell.today{border-color:#7F77DD}
+.day-name{font-size:10px;color:var(--color-text-tertiary);font-weight:500;text-transform:uppercase;margin-bottom:4px}
+.day-num{font-size:13px;font-weight:500;margin-bottom:6px}
+.post-pill{font-size:10px;padding:2px 6px;border-radius:10px;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.post-pill.scheduled{background:#E1F5EE;color:#085041}
+.post-pill.published{background:#EAF3DE;color:#27500A}
+.post-pill.failed{background:#FBEAEA;color:#8A2620}
+.post-pill.empty{background:var(--color-background-secondary);color:var(--color-text-tertiary)}
+.generate-panel{border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:20px;margin-bottom:20px}
+.gen-row{display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.gen-group{display:flex;flex-direction:column;gap:6px;flex:1;min-width:120px}
+.gen-label{font-size:12px;color:var(--color-text-secondary)}
+select,input[type=text],input[type=datetime-local],textarea{font-family:var(--font-sans);font-size:13px;color:var(--color-text-primary);background:var(--color-background-primary);border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);padding:6px 10px;width:100%}
+select:focus,input:focus,textarea:focus{outline:none;border-color:#7F77DD}
+textarea{resize:vertical;min-height:80px}
+.post-list{display:flex;flex-direction:column;gap:10px}
+.post-card{border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:14px;transition:border-color .15s}
+.post-card:hover{border-color:var(--color-border-secondary)}
+.post-meta{display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
+.post-time{font-size:11px;color:var(--color-text-tertiary)}
+.post-status{font-size:11px;padding:2px 8px;border-radius:10px}
+.status-scheduled{background:#E1F5EE;color:#085041}
+.status-published{background:#EAF3DE;color:#27500A}
+.status-failed{background:#FBEAEA;color:#8A2620}
+.post-body{font-size:13px;color:var(--color-text-primary);line-height:1.6;margin-bottom:10px;white-space:pre-wrap}
+.post-error{font-size:11px;color:var(--color-text-danger);margin-bottom:10px}
+.post-actions{display:flex;gap:8px;justify-content:flex-end}
+.loading{display:flex;align-items:center;gap:8px;color:var(--color-text-secondary);font-size:13px;padding:12px}
+.dot-anim span{animation:dot 1.2s infinite;display:inline-block}
+.dot-anim span:nth-child(2){animation-delay:.2s}
+.dot-anim span:nth-child(3){animation-delay:.4s}
+@keyframes dot{0%,80%,100%{opacity:.2}40%{opacity:1}}
+.settings-section{margin-bottom:24px}
+.settings-title{font-size:13px;font-weight:500;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px;border-bottom:0.5px solid var(--color-border-tertiary);padding-bottom:8px}
+.settings-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:0.5px solid var(--color-border-tertiary);gap:16px}
+.settings-row:last-child{border-bottom:none}
+.settings-note{font-size:12px;color:var(--color-text-tertiary);margin-bottom:14px}
+.gen-output{border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:12px;background:var(--color-background-secondary);font-size:13px;line-height:1.7;margin-top:14px;min-height:60px;white-space:pre-wrap}
+.section-label{font-size:12px;color:var(--color-text-secondary);margin-bottom:8px;margin-top:20px}
+.section-label:first-child{margin-top:0}
+.analytics-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-bottom:20px}
+.ana-card{border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:16px}
+.ana-title{font-size:12px;color:var(--color-text-secondary);margin-bottom:10px}
+.bar-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.bar-label{font-size:12px;color:var(--color-text-secondary);width:90px;text-align:right;flex-shrink:0;text-transform:capitalize}
+.bar-track{flex:1;height:8px;background:var(--color-background-secondary);border-radius:4px;overflow:hidden}
+.bar-fill{height:100%;border-radius:4px;transition:width .4s}
+.bar-val{font-size:11px;color:var(--color-text-tertiary);width:28px;text-align:right}
+.empty-state{font-size:13px;color:var(--color-text-tertiary);padding:20px;text-align:center}
+.idea-card{border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:10px 12px;margin-bottom:8px}
+.idea-topic{font-size:13px;font-weight:500;margin-bottom:2px}
+.idea-angle{font-size:12px;color:var(--color-text-secondary)}
+.idea-meta{font-size:11px;color:var(--color-text-tertiary);margin-top:4px}
+.status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <div class="logo"><span>Trend</span>Post</div>
+      <div style="font-size:11px;color:var(--color-text-tertiary);margin-top:2px">Content autopilot</div>
+    </div>
+    <div class="nav-item active" data-tab="dashboard" onclick="showTab('dashboard')"><span class="nav-icon">▦</span> Dashboard</div>
+    <div class="nav-item" data-tab="generate" onclick="showTab('generate')"><span class="nav-icon">✦</span> Generate</div>
+    <div class="nav-item" data-tab="queue" onclick="showTab('queue')"><span class="nav-icon">☷</span> Queue</div>
+    <div class="nav-item" data-tab="activity" onclick="showTab('activity')"><span class="nav-icon">↗</span> Activity</div>
+    <div class="nav-item" data-tab="settings" onclick="showTab('settings')"><span class="nav-icon">⚙</span> Settings</div>
+    <div style="flex:1"></div>
+    <div style="padding:16px;border-top:0.5px solid var(--color-border-tertiary)">
+      <div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:6px">Scheduler</div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <div class="status-dot" style="background:#1D9E75"></div>
+        <span id="scheduler-label" style="font-size:12px;font-weight:500;color:#085041">running</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="main">
+
+    <!-- DASHBOARD -->
+    <div class="tab active" id="tab-dashboard">
+      <div class="tab-header">
+        <div class="tab-title">Dashboard</div>
+        <button class="btn primary" onclick="showTab('generate')">✦ Generate posts</button>
+      </div>
+      <div class="stats-row" id="dash-stats">
+        <div class="stat-card"><div class="stat-label">Scheduled</div><div class="stat-val">—</div></div>
+        <div class="stat-card"><div class="stat-label">Published (30d)</div><div class="stat-val">—</div></div>
+        <div class="stat-card"><div class="stat-label">Failed</div><div class="stat-val">—</div></div>
+        <div class="stat-card"><div class="stat-label">Ideas</div><div class="stat-val">—</div></div>
+      </div>
+      <div class="section-label">Platforms configured</div>
+      <div class="platform-badges" id="dash-platforms" style="margin-bottom:24px"></div>
+      <div class="section-label">Upcoming posts</div>
+      <div class="post-list" id="dash-posts"><div class="empty-state">Loading…</div></div>
+    </div>
+
+    <!-- GENERATE -->
+    <div class="tab" id="tab-generate">
+      <div class="tab-header">
+        <div class="tab-title">Generate content</div>
+      </div>
+      <div class="generate-panel">
+        <div class="gen-row">
+          <div class="gen-group">
+            <div class="gen-label">Platform</div>
+            <select id="gen-platform">
+              <option value="twitter">Twitter / X</option>
+              <option value="linkedin">LinkedIn</option>
+              <option value="instagram">Instagram</option>
+              <option value="facebook">Facebook</option>
+              <option value="all">All platforms (batch only)</option>
+            </select>
+          </div>
+          <div class="gen-group">
+            <div class="gen-label">Tone</div>
+            <select id="gen-tone">
+              <option value="Founder-authentic">Founder-authentic</option>
+              <option value="Educational">Educational</option>
+              <option value="Provocative / hot take">Provocative / hot take</option>
+              <option value="Casual / fun">Casual / fun</option>
+              <option value="Story-driven">Story-driven</option>
+            </select>
+          </div>
+        </div>
+        <div class="gen-group" style="margin-bottom:14px">
+          <div class="gen-label">Topic (required for single post — batch mode infers its own topics)</div>
+          <input type="text" id="gen-topic" placeholder="e.g. uptime monitoring for startups">
+        </div>
+        <div class="gen-group" style="margin-bottom:14px">
+          <div class="gen-label">Additional context (optional — falls back to BRAND_NAME/PRODUCT_NAME/BRAND_VOICE from .env)</div>
+          <textarea id="gen-context" placeholder="Leave blank to use your configured brand voice"></textarea>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn primary" id="btn-generate" onclick="generatePost()">✦ Generate post</button>
+          <button class="btn" id="btn-batch" onclick="generateBatch()">⚡ Generate 7-day batch</button>
+        </div>
+        <div id="gen-loading" style="display:none" class="loading"><div class="dot-anim"><span>●</span><span>●</span><span>●</span></div> <span id="gen-loading-label">Writing your post...</span></div>
+        <div id="gen-output" style="display:none" class="gen-output"></div>
+        <div id="gen-schedule-row" style="display:none;gap:8px;margin-top:10px;align-items:center">
+          <input type="datetime-local" id="gen-schedule-at" style="max-width:220px">
+          <button class="btn sm primary" onclick="scheduleGenerated()">Schedule it</button>
+          <button class="btn sm" onclick="generatePost()">Regenerate</button>
+        </div>
+        <div id="gen-batch-output" style="display:none"></div>
+      </div>
+    </div>
+
+    <!-- QUEUE -->
+    <div class="tab" id="tab-queue">
+      <div class="tab-header">
+        <div class="tab-title">Content queue</div>
+        <button class="btn" onclick="showTab('generate')">+ Add post</button>
+      </div>
+      <div class="section-label">Next 7 days</div>
+      <div class="queue-grid" id="queue-calendar"></div>
+      <div class="section-label">All scheduled &amp; recent posts</div>
+      <div class="post-list" id="queue-list"><div class="empty-state">Loading…</div></div>
+      <div class="section-label">Generated ideas (not yet scheduled)</div>
+      <div id="queue-ideas"><div class="empty-state">Loading…</div></div>
+    </div>
+
+    <!-- ACTIVITY -->
+    <div class="tab" id="tab-activity">
+      <div class="tab-header">
+        <div class="tab-title">Activity</div>
+      </div>
+      <div class="settings-note">Real counts from your data only — TrendPost doesn't ingest platform engagement/reach analytics, so there are no engagement-rate or reach charts here.</div>
+      <div class="analytics-grid">
+        <div class="ana-card">
+          <div class="ana-title">Posts by status</div>
+          <div id="ana-status"></div>
+        </div>
+        <div class="ana-card">
+          <div class="ana-title">Posts by platform</div>
+          <div id="ana-platform"></div>
+        </div>
+        <div class="ana-card">
+          <div class="ana-title">Totals</div>
+          <div id="ana-totals" style="display:flex;flex-direction:column;gap:4px"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SETTINGS -->
+    <div class="tab" id="tab-settings">
+      <div class="tab-header">
+        <div class="tab-title">Settings</div>
+      </div>
+      <div class="settings-note">Read-only — edit these via your <code>.env</code> file and restart the server to apply changes.</div>
+      <div class="settings-section">
+        <div class="settings-title">Brand voice</div>
+        <div class="settings-row"><div>Brand name</div><div id="set-brand" style="color:var(--color-text-secondary)">—</div></div>
+        <div class="settings-row"><div>Product name</div><div id="set-product" style="color:var(--color-text-secondary)">—</div></div>
+        <div class="settings-row"><div>Voice description</div><div id="set-voice" style="color:var(--color-text-secondary);max-width:320px;text-align:right">—</div></div>
+      </div>
+      <div class="settings-section">
+        <div class="settings-title">Scheduling</div>
+        <div class="settings-row"><div>Scheduler sweep interval</div><div id="set-interval" style="color:var(--color-text-secondary)">—</div></div>
+      </div>
+      <div class="settings-section">
+        <div class="settings-title">Platform credentials</div>
+        <div id="set-platforms"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const PLATFORM_LABELS = { twitter: 'Twitter / X', linkedin: 'LinkedIn', instagram: 'Instagram', facebook: 'Facebook' };
+const PLATFORM_KEYS = Object.keys(PLATFORM_LABELS);
+
+async function api(path, options) {
+  const res = await fetch(path, {
+    headers: { 'Content-Type': 'application/json' },
+    ...options,
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `Request to ${path} failed (${res.status})`);
+  return body;
+}
+
+function showTab(t) {
+  document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-' + t).classList.add('active');
+  document.querySelector(`.nav-item[data-tab="${t}"]`).classList.add('active');
+  if (t === 'dashboard') loadDashboard();
+  if (t === 'queue') loadQueue();
+  if (t === 'activity') loadActivity();
+  if (t === 'settings') loadSettings();
+}
+
+function fmtTime(iso) {
+  return new Date(iso).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit', month: 'short', day: 'numeric' });
+}
+
+function postCard(p, { showPublish } = {}) {
+  const errorHtml = p.status === 'failed' && p.errorMessage ? `<div class="post-error">${escapeHtml(p.errorMessage)}</div>` : '';
+  const publishBtn = showPublish && p.status === 'scheduled'
+    ? `<button class="btn sm primary" onclick="publishNow('${p.id}')">Publish now</button>` : '';
+  return `<div class="post-card">
+    <div class="post-meta">
+      <span class="badge ${p.platform}" style="margin:0">${PLATFORM_LABELS[p.platform] || p.platform}</span>
+      <span class="post-time">${fmtTime(p.scheduledAt)}</span>
+      <span class="post-status status-${p.status}">${p.status}</span>
+    </div>
+    <div class="post-body">${escapeHtml(p.content)}</div>
+    ${errorHtml}
+    <div class="post-actions">
+      ${publishBtn}
+      <button class="btn sm danger" onclick="deletePostUI('${p.id}')">Delete</button>
+    </div>
+  </div>`;
+}
+
+function escapeHtml(s) {
+  return (s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// ── DASHBOARD ──────────────────────────────────────────────────
+async function loadDashboard() {
+  const [scheduled, published, failed, ideas, settings, upcoming] = await Promise.all([
+    api('/api/posts?status=scheduled&daysAhead=36500'),
+    api('/api/posts?status=published&daysAgo=30'),
+    api('/api/posts?status=failed&daysAgo=36500'),
+    api('/api/ideas'),
+    api('/api/settings'),
+    api('/api/posts?daysAhead=14'),
+  ]);
+
+  const stats = document.querySelectorAll('#dash-stats .stat-val');
+  stats[0].textContent = scheduled.length;
+  stats[1].textContent = published.length;
+  stats[2].textContent = failed.length;
+  stats[3].textContent = ideas.length;
+
+  const platformsEl = document.getElementById('dash-platforms');
+  platformsEl.innerHTML = PLATFORM_KEYS.map(k =>
+    `<span class="badge ${k} ${settings.platforms[k] ? 'active' : 'inactive'}">${PLATFORM_LABELS[k]}${settings.platforms[k] ? '' : ' (not configured)'}</span>`
+  ).join('');
+
+  const postsEl = document.getElementById('dash-posts');
+  postsEl.innerHTML = upcoming.length
+    ? upcoming.slice(0, 5).map(p => postCard(p, { showPublish: true })).join('')
+    : '<div class="empty-state">No upcoming posts scheduled.</div>';
+}
+
+// ── GENERATE ───────────────────────────────────────────────────
+let lastGenerated = null;
+
+async function generatePost() {
+  const platform = document.getElementById('gen-platform').value;
+  const tone = document.getElementById('gen-tone').value;
+  const topic = document.getElementById('gen-topic').value.trim();
+  const context = document.getElementById('gen-context').value.trim();
+  const out = document.getElementById('gen-output');
+  const loading = document.getElementById('gen-loading');
+  const scheduleRow = document.getElementById('gen-schedule-row');
+  document.getElementById('gen-batch-output').style.display = 'none';
+
+  if (platform === 'all') { alert('Pick a single platform for one post, or use "Generate 7-day batch" for all platforms.'); return; }
+  if (!topic) { alert('Topic is required to generate a single post.'); return; }
+
+  out.style.display = 'none';
+  scheduleRow.style.display = 'none';
+  loading.style.display = 'flex';
+  document.getElementById('gen-loading-label').textContent = 'Writing your post...';
+
+  try {
+    const result = await api('/api/content/generate', {
+      method: 'POST',
+      body: JSON.stringify({ topic, platform, tone, context: context || undefined }),
+    });
+    lastGenerated = { content: result.content, platform };
+    out.textContent = result.content;
+    out.style.display = 'block';
+    const dt = new Date(Date.now() + 60 * 60 * 1000);
+    dt.setSeconds(0, 0);
+    document.getElementById('gen-schedule-at').value = dt.toISOString().slice(0, 16);
+    scheduleRow.style.display = 'flex';
+  } catch (e) {
+    out.textContent = 'Error: ' + e.message;
+    out.style.display = 'block';
+  } finally {
+    loading.style.display = 'none';
+  }
+}
+
+async function generateBatch() {
+  const platformSel = document.getElementById('gen-platform').value;
+  const tone = document.getElementById('gen-tone').value;
+  const context = document.getElementById('gen-context').value.trim();
+  const platforms = platformSel === 'all' ? PLATFORM_KEYS : [platformSel];
+  const out = document.getElementById('gen-output');
+  const batchOut = document.getElementById('gen-batch-output');
+  const loading = document.getElementById('gen-loading');
+  document.getElementById('gen-schedule-row').style.display = 'none';
+  out.style.display = 'none';
+  loading.style.display = 'flex';
+  document.getElementById('gen-loading-label').textContent = 'Building your 7-day content plan...';
+
+  try {
+    const result = await api('/api/content/plan', {
+      method: 'POST',
+      body: JSON.stringify({ businessContext: context || undefined, platforms, weeksAhead: 1, postsPerWeek: 7 }),
+    });
+    batchOut.innerHTML = result.ideas.map(idea => `<div class="idea-card">
+      <div class="idea-topic">${escapeHtml(idea.topic)} <span class="badge ${idea.platform}" style="margin-left:6px">${PLATFORM_LABELS[idea.platform]}</span></div>
+      <div class="idea-angle">${escapeHtml(idea.angle)}</div>
+      <div class="idea-meta">Suggested: ${fmtTime(idea.scheduledFor)}</div>
+    </div>`).join('') || '<div class="empty-state">No ideas generated.</div>';
+    batchOut.style.display = 'block';
+  } catch (e) {
+    batchOut.innerHTML = `<div class="post-error">Error: ${escapeHtml(e.message)}</div>`;
+    batchOut.style.display = 'block';
+  } finally {
+    loading.style.display = 'none';
+  }
+}
+
+async function scheduleGenerated() {
+  if (!lastGenerated) return;
+  const scheduledAt = document.getElementById('gen-schedule-at').value;
+  if (!scheduledAt) { alert('Pick a date/time to schedule this post.'); return; }
+  try {
+    await api('/api/posts', {
+      method: 'POST',
+      body: JSON.stringify({ content: lastGenerated.content, platform: lastGenerated.platform, scheduledAt: new Date(scheduledAt).toISOString() }),
+    });
+    document.getElementById('gen-schedule-row').style.display = 'none';
+    document.getElementById('gen-output').style.display = 'none';
+    showTab('queue');
+  } catch (e) {
+    alert('Failed to schedule: ' + e.message);
+  }
+}
+
+// ── QUEUE ──────────────────────────────────────────────────────
+async function loadQueue() {
+  const calEl = document.getElementById('queue-calendar');
+  const listEl = document.getElementById('queue-list');
+  const ideasEl = document.getElementById('queue-ideas');
+  calEl.innerHTML = '';
+  listEl.innerHTML = '<div class="empty-state">Loading…</div>';
+  ideasEl.innerHTML = '<div class="empty-state">Loading…</div>';
+
+  const [upcoming, recent, ideas] = await Promise.all([
+    api('/api/posts?daysAhead=7'),
+    api('/api/posts?daysAgo=7'),
+    api('/api/ideas'),
+  ]);
+
+  const byId = new Map();
+  [...upcoming, ...recent].forEach(p => byId.set(p.id, p));
+  const all = [...byId.values()].sort((a, b) => new Date(a.scheduledAt) - new Date(b.scheduledAt));
+
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  for (let i = 0; i < 7; i++) {
+    const day = new Date(today.getTime() + i * 86400000);
+    const dayPosts = all.filter(p => {
+      const d = new Date(p.scheduledAt);
+      return d.getFullYear() === day.getFullYear() && d.getMonth() === day.getMonth() && d.getDate() === day.getDate();
+    });
+    const cell = document.createElement('div');
+    cell.className = 'day-cell' + (i === 0 ? ' today' : '');
+    let html = `<div class="day-name">${day.toLocaleDateString(undefined, { weekday: 'short' })}</div><div class="day-num">${day.getDate()}</div>`;
+    html += dayPosts.length
+      ? dayPosts.map(p => `<div class="post-pill ${p.status}">${PLATFORM_LABELS[p.platform] || p.platform}</div>`).join('')
+      : '<div class="post-pill empty">No posts</div>';
+    cell.innerHTML = html;
+    calEl.appendChild(cell);
+  }
+
+  listEl.innerHTML = all.length ? all.map(p => postCard(p, { showPublish: true })).join('') : '<div class="empty-state">No posts yet — generate one.</div>';
+
+  ideasEl.innerHTML = ideas.length
+    ? ideas.map(idea => `<div class="idea-card">
+        <div class="idea-topic">${escapeHtml(idea.topic)} <span class="badge ${idea.platform}" style="margin-left:6px">${PLATFORM_LABELS[idea.platform] || idea.platform}</span></div>
+        <div class="idea-angle">${escapeHtml(idea.angle)}</div>
+        <div class="idea-meta">${idea.status}${idea.scheduledFor ? ' · suggested ' + fmtTime(idea.scheduledFor) : ''}</div>
+      </div>`).join('')
+    : '<div class="empty-state">No ideas yet. Generate a batch from the Generate tab.</div>';
+}
+
+async function publishNow(id) {
+  try {
+    await api(`/api/posts/${id}/publish`, { method: 'POST' });
+  } catch (e) {
+    // publishPost never throws for a real credential failure — it records
+    // status:'failed' on the post itself — so a caught error here means
+    // something more fundamental (e.g. the post was deleted). Surface it.
+    alert('Publish request failed: ' + e.message);
+  }
+  document.querySelector('.nav-item.active').dataset.tab === 'queue' ? loadQueue() : loadDashboard();
+}
+
+async function deletePostUI(id) {
+  if (!confirm('Delete this post?')) return;
+  await api(`/api/posts/${id}`, { method: 'DELETE' });
+  document.querySelector('.nav-item.active').dataset.tab === 'queue' ? loadQueue() : loadDashboard();
+}
+
+// ── ACTIVITY ───────────────────────────────────────────────────
+function bar(label, value, max, color) {
+  const pct = max > 0 ? Math.round((value / max) * 100) : 0;
+  return `<div class="bar-row"><span class="bar-label">${label}</span><div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${color}"></div></div><span class="bar-val">${value}</span></div>`;
+}
+
+async function loadActivity() {
+  const [future, past, ideas, campaigns] = await Promise.all([
+    api('/api/posts?daysAhead=36500'),
+    api('/api/posts?daysAgo=36500'),
+    api('/api/ideas'),
+    api('/api/campaigns'),
+  ]);
+  const byId = new Map();
+  [...future, ...past].forEach(p => byId.set(p.id, p));
+  const all = [...byId.values()];
+
+  const byStatus = { scheduled: 0, published: 0, failed: 0 };
+  const byPlatform = { twitter: 0, linkedin: 0, instagram: 0, facebook: 0 };
+  all.forEach(p => { if (p.status in byStatus) byStatus[p.status]++; if (p.platform in byPlatform) byPlatform[p.platform]++; });
+
+  const maxStatus = Math.max(...Object.values(byStatus), 1);
+  document.getElementById('ana-status').innerHTML =
+    bar('scheduled', byStatus.scheduled, maxStatus, '#378ADD') +
+    bar('published', byStatus.published, maxStatus, '#1D9E75') +
+    bar('failed', byStatus.failed, maxStatus, '#D4534F');
+
+  const maxPlatform = Math.max(...Object.values(byPlatform), 1);
+  document.getElementById('ana-platform').innerHTML = PLATFORM_KEYS.map(k => bar(k, byPlatform[k], maxPlatform, '#7F77DD')).join('');
+
+  document.getElementById('ana-totals').innerHTML = `
+    <div style="display:flex;justify-content:space-between;font-size:13px"><span>Total posts</span><span style="font-weight:500">${all.length}</span></div>
+    <div style="display:flex;justify-content:space-between;font-size:13px"><span>Ideas generated</span><span style="font-weight:500">${ideas.length}</span></div>
+    <div style="display:flex;justify-content:space-between;font-size:13px"><span>Campaigns</span><span style="font-weight:500">${campaigns.length}</span></div>`;
+}
+
+// ── SETTINGS ───────────────────────────────────────────────────
+async function loadSettings() {
+  const s = await api('/api/settings');
+  document.getElementById('set-brand').textContent = s.brandName || 'not set';
+  document.getElementById('set-product').textContent = s.productName || 'not set';
+  document.getElementById('set-voice').textContent = s.brandVoice || 'not set';
+  document.getElementById('set-interval').textContent = Math.round(s.publishCheckIntervalMs / 60000) + ' min';
+
+  document.getElementById('set-platforms').innerHTML = PLATFORM_KEYS.map(k => `
+    <div class="settings-row">
+      <div>${PLATFORM_LABELS[k]}</div>
+      <div style="color:${s.platforms[k] ? '#085041' : 'var(--color-text-tertiary)'}">${s.platforms[k] ? 'Configured' : 'Not configured'}</div>
+    </div>`).join('');
+}
+
+loadDashboard();
+</script>
+</body>
+</html>
