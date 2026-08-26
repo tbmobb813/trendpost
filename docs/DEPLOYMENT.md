@@ -20,6 +20,23 @@ credential" error rather than blocking publishing to the others.
 editing it, run `docker compose up -d` instead so the container picks up the
 new values.
 
+**Also set `API_KEY`** (generate with `openssl rand -hex 32`) before this
+server is reachable from anywhere other than localhost. Without it, every
+`/api/*` route is unauthenticated — anyone who can reach the server can
+read/delete your data and spend your Anthropic budget. TrendPost will still
+start and run fine with `API_KEY` unset (it logs a startup warning), which
+is fine for purely local use, but is not safe on a shared network or the
+open internet. With `API_KEY` set, requests to `/api/*` need
+`Authorization: Bearer <API_KEY>`; the dashboard and setup wizard handle
+this automatically by prompting for the key in the browser and storing it
+in `localStorage`. `/health` and the static dashboard assets stay
+unauthenticated (needed for Docker's healthcheck and for the page shell to
+load before it can prompt for the key).
+
+The primary control here is still network isolation — put TrendPost behind
+Tailscale or an SSH tunnel rather than exposing port 3000 directly; `API_KEY`
+is defense-in-depth, not a substitute for that.
+
 ## 2. Run it
 
 **Docker (recommended):**

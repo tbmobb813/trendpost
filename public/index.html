@@ -98,6 +98,7 @@ textarea{resize:vertical;min-height:80px}
 .settings-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:0.5px solid var(--color-border-tertiary);gap:16px}
 .settings-row:last-child{border-bottom:none}
 .settings-note{font-size:12px;color:var(--color-text-tertiary);margin-bottom:14px}
+.warning-box{background:#FAEEDA;border:0.5px solid #E8D69A;border-radius:var(--border-radius-md);padding:10px 12px;font-size:12px;color:#7A5B06;margin-bottom:16px;line-height:1.6}
 .gen-output{border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:12px;background:var(--color-background-secondary);font-size:13px;line-height:1.7;margin-top:14px;min-height:60px;white-space:pre-wrap}
 .section-label{font-size:12px;color:var(--color-text-secondary);margin-bottom:8px;margin-top:20px}
 .section-label:first-child{margin-top:0}
@@ -149,6 +150,7 @@ textarea{resize:vertical;min-height:80px}
         <div class="tab-title">Dashboard</div>
         <button class="btn primary" onclick="showTab('generate')">✦ Generate posts</button>
       </div>
+      <div class="warning-box" id="dash-no-auth-warning" style="display:none">⚠️ Running without API authentication. See Settings for how to fix this before exposing this server beyond localhost.</div>
       <div class="stats-row" id="dash-stats">
         <div class="stat-card"><div class="stat-label">Drafts (needs review)</div><div class="stat-val">—</div></div>
         <div class="stat-card"><div class="stat-label">Scheduled</div><div class="stat-val">—</div></div>
@@ -306,6 +308,7 @@ textarea{resize:vertical;min-height:80px}
         <a class="btn primary" href="/setup.html" style="text-decoration:none;display:inline-block">Run setup wizard →</a>
       </div>
       <div class="settings-note">Read-only — edit these via your <code>.env</code> file and restart the server to apply changes, or use the setup wizard to test credentials and generate a new <code>.env</code> block.</div>
+      <div class="warning-box" id="set-no-auth-warning" style="display:none">⚠️ Running without API authentication — every /api/* request is unprotected. Set <code>API_KEY</code> in <code>.env</code> and restart before exposing this server beyond localhost or a private network (Tailscale/SSH tunnel).</div>
       <div class="settings-section">
         <div class="settings-title">Brand voice</div>
         <div class="settings-row"><div>Brand name</div><div id="set-brand" style="color:var(--color-text-secondary)">—</div></div>
@@ -330,11 +333,25 @@ textarea{resize:vertical;min-height:80px}
 const PLATFORM_LABELS = { twitter: 'Twitter / X', linkedin: 'LinkedIn', instagram: 'Instagram', facebook: 'Facebook' };
 const PLATFORM_KEYS = Object.keys(PLATFORM_LABELS);
 
-async function api(path, options) {
+const API_KEY_STORAGE = 'trendpost_api_key';
+
+function authHeaders() {
+  const key = localStorage.getItem(API_KEY_STORAGE);
+  return key ? { Authorization: 'Bearer ' + key } : {};
+}
+
+async function api(path, options, isRetry) {
   const res = await fetch(path, {
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
     ...options,
   });
+  if (res.status === 401 && !isRetry) {
+    const key = prompt('This server requires an API key. Enter it (see your .env\'s API_KEY):');
+    if (key) {
+      localStorage.setItem(API_KEY_STORAGE, key);
+      return api(path, options, true);
+    }
+  }
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.error || `Request to ${path} failed (${res.status})`);
   return body;
@@ -388,6 +405,8 @@ async function loadDashboard() {
     api('/api/settings'),
     api('/api/posts?daysAhead=14'),
   ]);
+
+  document.getElementById('dash-no-auth-warning').style.display = settings.apiKeyConfigured ? 'none' : 'block';
 
   const statEls = document.querySelectorAll('#dash-stats .stat-val');
   statEls[0].textContent = stats.draft;
@@ -675,6 +694,7 @@ async function loadActivity() {
 // ── SETTINGS ───────────────────────────────────────────────────
 async function loadSettings() {
   const s = await api('/api/settings');
+  document.getElementById('set-no-auth-warning').style.display = s.apiKeyConfigured ? 'none' : 'block';
   document.getElementById('set-brand').textContent = s.brandName || 'not set';
   document.getElementById('set-product').textContent = s.productName || 'not set';
   document.getElementById('set-voice').textContent = s.brandVoice || 'not set';

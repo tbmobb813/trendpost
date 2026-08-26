@@ -148,6 +148,24 @@ business context).
 See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for the full deployment guide,
 including how to get API credentials for each platform.
 
+### API authentication
+
+Every `/api/*` route (not `/health`, not the static dashboard files) can be
+gated behind a bearer token. Set `API_KEY` in `.env` — generate one with
+`openssl rand -hex 32` — and requests must send
+`Authorization: Bearer <API_KEY>`.
+
+If `API_KEY` is unset, the API runs unauthenticated and logs a loud warning
+on startup. This keeps the zero-config `clone → npm install → npm start`
+flow working for local/trusted-network use, but it means **anyone who can
+reach the server can read/delete your data and spend your Anthropic
+budget**. Set `API_KEY` before exposing this server beyond localhost or a
+private network (Tailscale/SSH tunnel) — see
+[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
+
+The dashboard and setup wizard prompt for the key in the browser on first
+use (a `401` triggers the prompt) and store it in `localStorage`.
+
 ## Development
 
 ```bash

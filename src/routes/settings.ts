@@ -10,6 +10,7 @@ export function registerSettingsRoutes(app: Hono): void {
       brandVoice: process.env.BRAND_VOICE ?? null,
       publishCheckIntervalMs: Number(process.env.PUBLISH_CHECK_INTERVAL_MS) || 5 * 60 * 1000,
       autoApprove: process.env.AUTO_APPROVE === 'true',
+      apiKeyConfigured: !!process.env.API_KEY,
       platforms: {
         twitter: isConfigured([
           'TWITTER_API_KEY',

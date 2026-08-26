@@ -299,9 +299,23 @@ function setStatus(platform,state,msg){
   msgEl.style.color = state==='ok'?'#1D9E75':state==='err'?'#E24B4A':state==='testing'?'#BA7517':'var(--color-text-tertiary)';
 }
 
-async function callVerify(path, body, platform) {
+const API_KEY_STORAGE = 'trendpost_api_key';
+
+function authHeaders() {
+  const key = localStorage.getItem(API_KEY_STORAGE);
+  return key ? { Authorization: 'Bearer ' + key } : {};
+}
+
+async function callVerify(path, body, platform, isRetry) {
   try {
-    const res = await fetch(path, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+    const res = await fetch(path, { method:'POST', headers:{'Content-Type':'application/json', ...authHeaders()}, body:JSON.stringify(body) });
+    if (res.status === 401 && !isRetry) {
+      const key = prompt('This server requires an API key. Enter it (see your .env\'s API_KEY):');
+      if (key) {
+        localStorage.setItem(API_KEY_STORAGE, key);
+        return callVerify(path, body, platform, true);
+      }
+    }
     const data = await res.json();
     setStatus(platform, data.ok ? 'ok' : 'err', data.message || (data.ok ? 'Connected' : 'Failed'));
   } catch (e) {
