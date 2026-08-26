@@ -21,9 +21,17 @@ jest.mock('@mozilla/readability', () => ({
 // promisify's internals.
 jest.mock('child_process', () => ({ execFile: jest.fn() }));
 
+// extractFromUrl()'s own SSRF-guard behavior (rejecting private/internal
+// addresses, re-checking redirect hops) is covered by ssrf-guard.test.ts
+// against the real DNS-resolution logic. Mocked out here so these tests
+// exercise extraction/parsing only and don't depend on real DNS lookups
+// for "example.com" succeeding in whatever environment runs them.
+jest.mock('../ssrf-guard', () => ({ assertSafeToFetch: jest.fn().mockResolvedValue(undefined) }));
+
 import { execFile } from 'child_process';
 import { writeFileSync } from 'fs';
 import { Readability } from '@mozilla/readability';
+import { assertSafeToFetch } from '../ssrf-guard';
 import { extractFromUrl, extractYoutubeTranscript, NoCaptionsError } from '../extract';
 
 type ExecFileCallback = (error: NodeJS.ErrnoException | null, result?: { stdout: string; stderr: string }) => void;
@@ -113,6 +121,14 @@ describe('extractFromUrl()', () => {
     }) as unknown as typeof fetch;
 
     await expect(extractFromUrl('https://example.com/thin')).rejects.toThrow(/Could not extract/);
+  });
+
+  it('rejects the URL and never calls fetch when the SSRF guard throws', async () => {
+    (assertSafeToFetch as jest.Mock).mockRejectedValueOnce(new Error('Refusing to fetch — private address'));
+    global.fetch = jest.fn();
+
+    await expect(extractFromUrl('http://169.254.169.254/latest/meta-data')).rejects.toThrow(/private address/);
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 });
 

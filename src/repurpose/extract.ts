@@ -5,6 +5,7 @@ import { promisify } from 'util';
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { assertSafeToFetch } from './ssrf-guard';
 
 const execFileAsync = promisify(execFile);
 
@@ -27,8 +28,30 @@ export class NoCaptionsError extends Error {
 const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 
+// fetch() follows redirects transparently, which would let a public-looking
+// URL bounce to an internal address after the initial SSRF check passed —
+// so redirects are followed manually here, re-checking each hop.
+const MAX_REDIRECTS = 5;
+
+async function fetchSafely(url: string): Promise<Response> {
+  let current = url;
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    await assertSafeToFetch(current);
+    const res = await fetch(current, {
+      headers: { 'User-Agent': USER_AGENT },
+      redirect: 'manual',
+    });
+    if (res.status >= 300 && res.status < 400 && res.headers.get('location')) {
+      current = new URL(res.headers.get('location')!, current).toString();
+      continue;
+    }
+    return res;
+  }
+  throw new Error(`Too many redirects while fetching ${url}.`);
+}
+
 export async function extractFromUrl(url: string): Promise<ExtractedSource> {
-  const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT } });
+  const res = await fetchSafely(url);
   if (!res.ok) {
     throw new Error(`Failed to fetch ${url}: ${res.status} ${res.statusText}`);
   }
