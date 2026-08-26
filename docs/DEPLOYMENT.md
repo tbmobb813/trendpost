@@ -37,6 +37,13 @@ The primary control here is still network isolation — put TrendPost behind
 Tailscale or an SSH tunnel rather than exposing port 3000 directly; `API_KEY`
 is defense-in-depth, not a substitute for that.
 
+**Also note**: `/api/content/generate`, `/api/content/plan`,
+`/api/content/analyze`, and `/api/repurpose` share a rate limit
+(`ANTHROPIC_RATE_LIMIT_MAX` / `ANTHROPIC_RATE_LIMIT_WINDOW_MIN`, default 30
+requests per 10 minutes) so a leaked key or a runaway client can't blow
+through your Anthropic budget. Raise it in `.env` if your real usage pattern
+needs more headroom.
+
 ## 2. Run it
 
 **Docker (recommended):**

@@ -166,6 +166,16 @@ private network (Tailscale/SSH tunnel) — see
 The dashboard and setup wizard prompt for the key in the browser on first
 use (a `401` triggers the prompt) and store it in `localStorage`.
 
+### Rate limiting
+
+`/api/content/generate`, `/api/content/plan`, `/api/content/analyze`, and
+`/api/repurpose` share a single request budget (`ANTHROPIC_RATE_LIMIT_MAX`
+requests per `ANTHROPIC_RATE_LIMIT_WINDOW_MIN` minutes, default 30 per 10
+minutes — see `.env.example`) so a leaked `API_KEY` or a buggy client retry
+loop can't run away with your Anthropic bill. Exceeding it returns `429`
+with a `Retry-After` header. The limit is process-wide, not per-caller, and
+resets on restart.
+
 ## Development
 
 ```bash

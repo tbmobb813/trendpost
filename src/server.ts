@@ -15,6 +15,7 @@ import { registerVerifyRoutes } from './routes/verify';
 import { registerStatsRoutes } from './routes/stats';
 import { registerRepurposeRoutes } from './routes/repurpose';
 import { apiKeyAuth } from './auth';
+import { rateLimiter } from './rate-limit';
 
 if (!process.env.API_KEY) {
   console.warn(
@@ -30,6 +31,18 @@ const app = new Hono();
 const storage = new TrendPostStorage();
 
 app.use('/api/*', apiKeyAuth());
+
+// Shared budget cap across every route that calls the Anthropic API —
+// see src/rate-limit.ts for why this is one global bucket rather than
+// per-route or per-caller.
+const anthropicLimiter = rateLimiter({
+  windowMs: (Number(process.env.ANTHROPIC_RATE_LIMIT_WINDOW_MIN) || 10) * 60 * 1000,
+  max: Number(process.env.ANTHROPIC_RATE_LIMIT_MAX) || 30,
+  label: 'AI content generation',
+});
+for (const path of ['/api/content/generate', '/api/content/plan', '/api/content/analyze', '/api/repurpose']) {
+  app.use(path, anthropicLimiter);
+}
 
 registerHealthRoutes(app);
 registerCampaignRoutes(app, storage);
